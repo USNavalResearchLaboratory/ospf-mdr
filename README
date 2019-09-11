@@ -1,4 +1,7 @@
-The OSPF-MDR implementation for quagga OSPFv3 is an implementation of RFC 5614 (OSPF MDR), RFC 5243 (OSPF Database Exchange Optimization), and RFC 5838 (OSPFv3 Address Families) for efficient routing in mobile ad hoc networks (MANETs).
+The OSPF-MDR implementation for quagga OSPFv3 is an implementation of RFC 5614 
+(OSPF MDR), RFC 5243 (OSPF Database Exchange Optimization), and RFC 5838 
+(OSPFv3 Address Families) for efficient routing in mobile ad hoc networks 
+(MANETs).  See RELEASE_NOTES.MobileRouting for further details
 
 Quagga is free software that manages various IPv4 and IPv6 routing
 protocols.
