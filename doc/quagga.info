@@ -1,0 +1,249 @@
+This is quagga.info, produced by makeinfo version 4.13 from quagga.texi.
+
+Copyright (C) 1999-2005 Kunihiro Ishiguro, et al.
+
+     Permission is granted to make and distribute verbatim copies of
+     this manual provided the copyright notice and this permission
+     notice are preserved on all copies.
+
+     Permission is granted to copy and distribute modified versions of
+     this manual under the conditions for verbatim copying, provided
+     that the entire resulting derived work is distributed under the
+     terms of a permission notice identical to this one.
+
+     Permission is granted to copy and distribute translations of this
+     manual into another language, under the above conditions for
+     modified versions, except that this permission notice may be
+     stated in a translation approved by Kunihiro Ishiguro.
+
+INFO-DIR-SECTION Routing Software:
+START-INFO-DIR-ENTRY
+* Quagga: (quagga).		The Quagga Software Routing Suite
+END-INFO-DIR-ENTRY
+
+   This file documents the Quagga Software Routing Suite which manages
+common TCP/IP routing protocols.
+
+   This is Edition 0.99.21mr2.2, last updated 25 July 2012 of `The
+Quagga Manual', for Quagga Version 0.99.21mr2.2.
+
+   Copyright (C) 1999-2005 Kunihiro Ishiguro, et al.
+
+     Permission is granted to make and distribute verbatim copies of
+     this manual provided the copyright notice and this permission
+     notice are preserved on all copies.
+
+     Permission is granted to copy and distribute modified versions of
+     this manual under the conditions for verbatim copying, provided
+     that the entire resulting derived work is distributed under the
+     terms of a permission notice identical to this one.
+
+     Permission is granted to copy and distribute translations of this
+     manual into another language, under the above conditions for
+     modified versions, except that this permission notice may be
+     stated in a translation approved by Kunihiro Ishiguro.
+
+
+Indirect:
+quagga.info-1: 1950
+quagga.info-2: 269935
+
+Tag Table:
+(Indirect)
+Node: Top1950
+Node: Overview3377
+Node: About Quagga4780
+Node: System Architecture7033
+Node: Supported Platforms9723
+Node: Supported RFCs10539
+Node: How to get Quagga12624
+Node: Mailing List13048
+Node: Bug Reports13495
+Node: Installation14373
+Node: Configure the Software14807
+Node: The Configure script and its options15055
+Node: Least-Privilege support18243
+Node: Linux notes19979
+Ref: Linux notes-Footnote-121837
+Node: Build the Software21903
+Node: Install the Software22451
+Node: Basic commands23911
+Node: Config Commands24686
+Node: Basic Config Commands25579
+Node: Sample Config File31653
+Node: Terminal Mode Commands32423
+Node: Common Invocation Options33520
+Node: Virtual Terminal Interfaces34927
+Node: VTY Overview35438
+Node: VTY Modes36695
+Node: VTY View Mode37145
+Node: VTY Enable Mode37395
+Node: VTY Other Modes37673
+Node: VTY CLI Commands37849
+Node: CLI Movement Commands38309
+Node: CLI Editing Commands38832
+Node: CLI Advanced Commands39420
+Node: Zebra40186
+Node: Invoking zebra40833
+Node: Interface Commands41364
+Node: Static Route Commands42929
+Node: zebra Route Filtering46195
+Node: Miscellaneous Commands47348
+Node: zebra Terminal Mode Commands48357
+Node: RIP49431
+Node: Starting and Stopping ripd50392
+Node: RIP netmask51805
+Node: RIP Configuration52904
+Node: RIP Version Control55904
+Node: How to Announce RIP route58086
+Node: Filtering RIP Routes60651
+Node: RIP Metric Manipulation62118
+Node: RIP distance63031
+Node: RIP route-map63846
+Node: RIP Authentication66391
+Node: RIP Timers68634
+Node: Show RIP Information69922
+Node: RIP Debug Commands71295
+Node: RIPng72291
+Node: Invoking ripngd72611
+Node: ripngd Configuration72860
+Node: ripngd Terminal Mode Commands73611
+Node: ripngd Filtering Commands73975
+Node: OSPFv274484
+Node: Configuring ospfd75135
+Node: OSPF router75683
+Ref: ospf router-id76230
+Ref: OSPF passive-interface79441
+Ref: OSPF auto-cost reference-bandwidth83865
+Node: OSPF area85537
+Ref: OSPF virtual-link87868
+Ref: area authentication message-digest91579
+Node: OSPF interface91995
+Ref: ip ospf authentication message-digest92645
+Ref: ip ospf message-digest-key93627
+Ref: ip ospf dead-interval minimal94436
+Node: Redistribute routes to OSPF96841
+Ref: OSPF redistribute97827
+Ref: ospf distribute-list99667
+Node: Showing OSPF information100120
+Ref: show ip ospf100331
+Node: Debugging OSPF101636
+Node: OSPF Configuration Examples102711
+Node: OSPFv3104081
+Node: OSPF6 router104454
+Node: OSPF6 area105202
+Node: OSPF6 interface105380
+Node: Redistribute routes to OSPF6106738
+Node: Showing OSPF6 information107054
+Node: OSPF6 Configuration Examples107911
+Node: OSPFv3 Address Families108332
+Node: Overview-AF109004
+Node: Configuring OSPF-AF109778
+Node: Running OSPF-AF111769
+Node: Open Issues112363
+Node: OSPF-MANET113101
+Node: Overview-MANET113786
+Node: Protocol Operation116843
+Node: Building OSPF-MANET117117
+Node: Configuring OSPF-MANET117733
+Node: Showing OSPF-MANET Information132159
+Node: Running OSPF-MANET132982
+Node: Use with Address Families133765
+Node: OSPF-MANET Configuration Examples134334
+Node: Babel135626
+Node: Configuring babeld136444
+Node: Babel configuration136902
+Node: Babel redistribution138834
+Node: Show Babel information139156
+Node: Babel debugging commands139594
+Node: BGP140088
+Node: Starting BGP141011
+Node: BGP router141590
+Node: BGP distance142865
+Node: BGP decision process143305
+Node: BGP route flap dampening143822
+Node: BGP network144538
+Node: BGP route144730
+Node: Route Aggregation145284
+Node: Redistribute to BGP145855
+Node: BGP Peer146384
+Node: Defining Peer146573
+Node: BGP Peer commands147188
+Node: Peer filtering150218
+Node: BGP Peer Group150728
+Node: BGP Address Family151043
+Node: Autonomous System151199
+Node: AS Path Regular Expression152078
+Node: Display BGP Routes by AS Path153327
+Node: AS Path Access List153769
+Node: Using AS Path in Route Map154238
+Node: Private AS Numbers154521
+Node: BGP Communities Attribute154681
+Node: BGP Community Lists157144
+Node: Numbered BGP Community Lists159800
+Node: BGP Community in Route Map161389
+Node: Display BGP Routes by Community163334
+Node: Using BGP Communities Attribute164505
+Node: BGP Extended Communities Attribute168075
+Node: BGP Extended Community Lists169849
+Node: BGP Extended Communities in Route Map171726
+Node: Displaying BGP routes172187
+Node: Show IP BGP172426
+Node: More Show IP BGP173128
+Node: Capability Negotiation174450
+Node: Route Reflector177924
+Node: Route Server178205
+Node: Multiple instance179273
+Node: BGP instance and view181120
+Node: Routing policy182502
+Node: Viewing the view183272
+Node: How to set up a 6-Bone connection183559
+Node: Dump BGP packets and table184933
+Node: BGP Configuration Examples185517
+Node: Configuring Quagga as a Route Server194470
+Node: Description of the Route Server model195431
+Ref: fig:normal-processing197008
+Ref: fig:full-mesh197701
+Ref: fig:route-server197879
+Ref: filter-delegation198356
+Ref: Route Server tasks199525
+Ref: Route-server path filter process199896
+Ref: fig:rs-processing202210
+Node: Commands for configuring a Route Server204619
+Node: Example of Route Server Configuration207646
+Node: Configuration of the BGP routers without Route Server208567
+Node: Configuration of the BGP routers with Route Server211155
+Node: Configuration of the Route Server itself212356
+Node: Further considerations about Import and Export route-maps216955
+Node: VTY shell219824
+Node: VTY shell username220493
+Node: VTY shell integrated configuration221125
+Node: Filtering222573
+Node: IP Access List222926
+Node: IP Prefix List223302
+Node: ip prefix-list description226321
+Node: ip prefix-list sequential number control226848
+Node: Showing ip prefix-list227390
+Node: Clear counter of ip prefix-list228498
+Node: Route Map228937
+Node: Route Map Command232382
+Node: Route Map Match Command232691
+Node: Route Map Set Command233315
+Node: Route Map Call Command234223
+Node: Route Map Exit Action Command234553
+Node: Route Map Examples235035
+Node: IPv6 Support235532
+Node: Router Advertisement236111
+Node: Kernel Interface242428
+Node: SNMP Support244385
+Node: Getting and installing an SNMP agent244984
+Node: SMUX configuration245557
+Node: MIB and command reference247583
+Node: Handling SNMP Traps248943
+Node: Zebra Protocol255006
+Node: Packet Binary Dump Format259035
+Node: Command Index269935
+Node: VTY Key Index339840
+Node: Index342756
+
+End Tag Table

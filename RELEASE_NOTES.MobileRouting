@@ -1,0 +1,366 @@
+	Release Notes for the Mobile Routing variant of Quagga
+
+The Mobile Routing variant of Quagga (http://www.quagga.net/) is a
+research implementation of OSPF MANET Designated Routers (MDRs) that
+implements the following RFCs:
+
+  - RFC 5614 Mobile Ad Hoc Network (MANET) Extension of OSPF Using
+	     Connected Dominating Set (CDS) Flooding
+
+  - RFC 5243 OSPF Database Exchange Summary List Optimization
+
+  - RFC 5838 Support of Address Families in OSPFv3
+
+The implementation goes a bit beyond what is specified in the above
+RFCs based on experience with emulations and WiFi-based field
+experiments.
+
+Authors
+=======
+
+The primary authors of OSPF-MDR are Richard Ogier and Phillip
+Spagnolo.  Tom Goff has been the lead maintainer since 2009.
+
+This software is supported and maintained as open source software by
+Boeing Research & Technology, Naval Research Laboratory, and other
+open source contributors.
+
+License
+=======
+
+GNU GPLv2
+
+Availability
+============
+
+See the downloads section of
+http://cs.itd.nrl.navy.mil/work/ospf-manet/ for releases and snapshots
+generated when updates occur.
+
+Check back there for updates, to report bugs, or for discussions with
+developers.
+
+Documentation
+=============
+
+Documentation is integrated with the Quagga Texinfo documentation; see
+the doc directory files ospf6d-af.texi and ospf6d-manet.texi.
+
+Version Notes
+=============
+
+quagga-mr 0.99.21mr2.2 release (Jul 2012)
+-----------------------------------------
+
+This maintenance release aligns the codebase with upstream Quagga
+version 0.99.21.  A summary of changes since the 0.99.20mr2.1 release
+are outlined below.
+
+Deprecated OSPFv3 interface configuration commands:
+
+  - "ipv6 ospf6 diffhellos"
+  - "no ipv6 ospf6 diffhellos"
+
+all code:
+
+  - Sync with quagga_0_99_21_release from
+    git://git.savannah.nongnu.org/quagga.git.
+
+ospf6d:
+
+  - Improve removing MaxAge LSAs from the link state database.
+
+  - Fix MDR neighbor acked LSA processing.
+
+  - Fix some memory leaks.
+
+  - Improve sending Link State Request packets to make sending
+    redundant requests less likely.
+
+  - Small improvements to how loopback and passive interfaces are managed.
+
+  - Use the correct sequence number for retransmitted database
+    description packets.
+
+  - Fix installing routes to prefixes associated with OSPF interfaces.
+
+  - Reuse link state IDs for Inter-Area-Prefix-, Inter-Area-Router-,
+    and AS-External-LSAs when possible.
+
+  - Improve multi-area routing.
+
+  - Deprecate the 'ipv6 ospf6 diffhellos' interface vty command in
+    favor of 'ipv6 ospf6 twohoprefresh'.
+
+  - Cancel the AdjOK? event when a neighbor is deleted.
+
+  - Add jitter when sending Hellos.
+
+  - Add a small margin to the neighbor inactivity timer.
+
+tests:
+
+  - Include some initial CORE-based test cases for OSPFv3.
+
+quagga-mr 0.99.20mr2.1 release (Jan 2012)
+-----------------------------------------
+
+This is a maintenance release mostly tracking upstream Quagga updates.
+A summary of the high-level changes since the 0.99.17mr2.0 release of
+quagga-mr are outlined below.
+
+all code:
+
+  - Sync with quagga_0_99_20_release from
+    git://code.quagga.net/quagga.git.
+
+ospf6d:
+
+ * Changes that impact backward compatibility and interoperability:
+
+  - Enable OSPFv3 Address Families interoperability by default.
+
+  - Use the values from RFC 5614 for MDR TLVs; non-standard backwards
+    compatibility with previous releases can be configured.
+
+  - OSPFv3 Instance ID is no longer configurable per interface and is
+    now a global attribute.
+
+  - The default values for HelloInterval, RouterDeadInterval, and
+    RxmtInterval for MDR interfaces were changed to be consistent with
+    Section 3.2 of RFC 5614.
+
+ * Other changes:
+
+  - Reorganization of some MDR code.
+
+  - Support the OSPFv3 LinkLSASuppression interface option and enable
+    link-LSA suppression by default on MDR interfaces.
+
+  - Allow configuring the IPv6 transport class used for OSPFv3
+    protocol packets.
+
+  - Avoid some unnecessary delete-then-add route updates.
+
+  - Fix how prefixes are compared for route redistribution.
+
+  - Improve LSA debugging commands.
+
+  - Improve logging for SDT/CMAP visualization.
+
+  - Add a vty command to check for asymmetric link advertisements in
+    router-LSAs.
+
+New OSPFv3 view commands:
+
+  - "show ipv6 ospf6 database asymmetric-links"
+
+New OSPFv3 configuration commands:
+
+  - "instance-id <0-255>"
+  - "protocol-traffic-class <0-255>"
+  - "mdr-tlv-interoperability"
+  - "no mdr-tlv-interoperability"
+
+New OSPFv3 interface configuration commands:
+
+  - "ipv6 ospf6 link-lsa-suppression"
+  - "no ipv6 ospf6 link-lsa-suppression"
+
+
+quagga-mr 0.99.17mr2.0 release (May 2011)
+-----------------------------------------
+
+This is a maintenance release focused on incremental improvements
+rather than significant new features.  High-level changes since
+quagga-mr 0.99.16mr1.0 are summarized below.
+
+New zebra configuration commands:
+
+  - "rib sort-nexthops descending"
+  - "rib sort-nexthops ascending"
+  - "no rib sort-nexthops"
+
+  - "netlink linkmetrics-multicast-group <1-64>"
+  - "no netlink linkmetrics-multicast-group"
+
+New OSPFv3 configuration commands:
+
+  - "af-interoperability"
+  - "no af-interoperability"
+
+  - "area A.B.C.D spf-delay-msec <0-10000>"
+  - "area A.B.C.D spf-holdtime-msec <0-10000>"
+
+New OSPFv3 interface configuration commands:
+
+  - "ipv6 ospf6 neighbor-metric-hysteresis <1-65535>"
+  - "no ipv6 ospf6 neighbor-metric"
+
+  - "ipv6 ospf6 linkmetric-formula (cisco|nrl-cable)"
+  - "no ipv6 ospf6 linkmetric-formula"
+  - "ipv6 ospf6 linkmetric-weight-throughput <0-100>"
+  - "ipv6 ospf6 linkmetric-weight-resources <0-100>"
+  - "ipv6 ospf6 linkmetric-weight-latency <0-100>"
+  - "ipv6 ospf6 linkmetric-weight-l2_factor <0-100>"
+
+  - "ipv6 ospf6 linkmetric-update-filter (adjust-values)"
+  - "no ipv6 ospf6 linkmetric-update-filter"
+
+  - "ipv6 ospf6 periodic-metric-function neighbor-time [<0-65535>]
+    recalculate-interval <1-65535>"
+  - "no ipv6 ospf6 periodic-metric-function"
+
+  - "ipv6 ospf6 neighbor-cost A.B.C.D <1-65535>"
+  - "no ipv6 ospf6 neighbor-cost [A.B.C.D]"
+
+  - "ipv6 ospf6 min-smf-relay-mdr-level (MDR|BMDR)"
+  - "ipv6 ospf6 min-smf-relay-neighbor-count <1-2>"
+  - "ipv6 ospf6 smf-relay-isolated"
+  - "no ipv6 ospf6 smf-relay-isolated"
+
+New OSPFv3 informational commands:
+
+  - "show ipv6 ospf6 neighbor-linkmetrics [A.B.C.D]"
+  - "show ipv6 ospf6 neighbor mdrdetail [A.B.C.D]"
+
+all code:
+
+  - Sync with quagga_0_99_17_release from
+    git://code.quagga.net/quagga.git.
+
+ospf6d:
+
+  - Improve support for equal-cost multipath routing.
+
+  - Apply network mask to connected routes when generating prefixes
+    included in link-LSAs.
+
+  - Ignore host bits when determining if OSPFv3 routes are equivalent.
+
+  - Avoid using MaxAge LSAs for SPF calculations.
+
+  - Improve MinLSArrival processing.
+
+  - Expose additional LSA debugging vty commands to vtysh.
+
+  - Improve OSPFv3 support for multiple address families and add a
+    configuration option to enable AF interoperability with other RFC
+    5838 implementations.
+
+  - Support specifying OSPFv3 area-IDs as a decimal value in addition to
+    dotted quad notation.
+
+  - Fix reported consec-hello-threshold configuration value.
+
+  - Add support for lower-layer link status and RFC 4938/5578 and link
+    metrics signaling initially developed as part of the CABLE JCTD
+    project.  Some improvements include: support for multiple cost
+    metric formulas; improve handling of invalid link metrics updates;
+    make the link metrics netlink multicast group configurable.
+
+  - Improved support for OSPFv3 link-local signaling (RFC 5613).
+
+  - Improve OSPFv3 route redistribution.
+
+  - Add a framework for extensible interface and neighbor operations
+    to allow registering callbacks for certain events and deconflict
+    managing neighbor cost metrics.
+
+  - Set the hop limit for OSPFv3 multicast packets to 1 by default.
+
+  - Improve vty commands for neighbor status information.
+
+  - Add a configurable delay and hold time for area SPF calculations.
+
+  - Fix an issue where neighbor interface index changes were not
+    processed correctly for MDR interfaces.
+
+  - Fix some small memory leaks.
+
+  - Add options to modify how SMF relaying is controlled.
+
+zebra:
+
+  - Add the option to sort rib entry next-hops when equal-cost
+    multipath routing is enabled and active.
+
+doc:
+
+  - Update OSPF-MDR and OSPFv3 Address Families documentation; document
+    new zebra and ospf6d vty commands.
+
+Known issues:
+
+  - Most neighbor metric managers do not react when the associated
+    interface cost changes and per-neighbor cost metrics may not be
+    updated (can affect non-broadcast interfaces).
+
+  - OSPFv3 Address Families does not include support for the IPv6 MTU
+    TLV in link-local signaling data.
+
+
+quagga-mr 0.99.16mr1.0 release (June 2010)
+------------------------------------------
+
+This release includes updates to OSPF-MDR based on the 0.99.16 release
+of Quagga.  A brief summary of changes since the previous patch
+release (quagga-0.99.9.ospfv3-manetmdr.patch) are listed below.
+
+New features
+~~~~~~~~~~~~
+
+all code:
+
+    - upgrade to quagga-0.99.16 base
+    - remove whitespace changes
+    - general coding style cleanup
+
+ospf6d:
+
+    - Add TLV data before calculating the LLS checksum
+    - Don't remove self-originated MaxAge LSAs
+    - Make MinLSArrival and MinLSInterval configurable
+    - Enforce MinLSInterval
+    - Fix checksum comparison when determining which lsa is newer
+    - workaround some cases of inconsistent neighbor state
+    - cleanup handling MDR-specific time
+    - Fix SMF file descriptor handling
+    - Use sizeof() the destination to avoid an overflow in memcpy()
+    - Fix unlocking LSAs
+    - Fix prematurely aging a LSA when using relative time
+    - allow quagga to log links and paths to a file, for use by
+      SDT/CMAP visualization
+    - add metric function API that allows new links to enter network
+      with high cost and lower cost over time
+    - restore improved SMF integration
+    - add neighbor acceptance criteria (consecutive hellos to
+      transition to INIT)
+    - expose MDRConstraint parameter to vtysh API
+    - lexicographic comparison for MDR selection was ignoring router
+      priority
+
+vtysh:
+
+    - Fix vty completion with readline 6
+
+zebra:
+
+    - consider all nexthops when looking for a gateway match
+    - set the interface link-layer socket address
+
+other:
+
+    - Fix some configure script problems on FreeBSD
+
+Caveats and known issues
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - OSPF MDR is not completely aligned with RFC 5614 as published,
+      but with a draft version of that specification.
+
+    - The checksum of incoming link-local signal data is not checked.
+
+    - This version may not function correctly in FreeBSD 8.0 jails
+      when routes are redistributed between ospfd and ospf6d.  The
+      CORE example scenario sample1.imn is a known problem case.

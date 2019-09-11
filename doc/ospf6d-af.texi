@@ -1,0 +1,146 @@
+@node OSPFv3 Address Families
+@chapter OSPFv3 Address Families
+
+The following text describes the implementation of a mechanism for supporting 
+multiple address families in OSPFv3 using multiple instances.  It 
+maps an address family (AF) to an OSPFv3 instance using the Instance ID 
+field in the OSPFv3 packet header.  This approach is fairly simple 
+and minimizes extensions to OSPFv3 for supporting multiple AFs.
+
+This implementation also enables OSPF MANET to support IPv4 routing (next
+chapter).
+
+@menu
+* Overview-AF::
+* Configuring OSPF-AF::
+* Running OSPF-AF::
+* Open Issues::
+@end menu
+
+@node Overview-AF
+@section Overview
+
+Please see Section 2 of @uref{http://tools.ietf.org/html/rfc5838, RFC
+5838}.
+
+@subsection Compliance
+
+Most of the implemented OSPFv3 features support Address Families (AF)
+according to @uref{http://tools.ietf.org/html/rfc5838, RFC 5838}.
+
+The @command{af-interoperability} setting enables interoperability
+with other RFC 5838 implementations but sacrifices backwards
+compatibility.  As of release quagga-0.99.20mr2.1, AF interoperability
+is enabled by default.  Disabling this flag will make the
+implementation compatible with previous, non-standards-compliant,
+releases of quagga-mobile-routing (see the @command{no
+af-interoperability} configuration command).
+
+@node Configuring OSPF-AF
+@section Configuring OSPF-AF
+
+Address Families can be configured in one of two ways.
+
+1.  Add the following lines to the @file{ospf6d.conf} or
+@file{Quagga.conf} configuration file.
+@example
+router ospf6
+  instance-id <0-255>
+@end example
+
+2.  From the vtysh or telnet terminal type:
+@example
+# configure terminal
+(config)# router ospf6
+(config-ospf6)# instance-id <0-255>
+(config-ospf6)# exit
+(config)# exit
+@end example
+
+The value of the instance ID must fall in one of the ranges below.
+The most common values are from ranges 0--31 for unicast IPv6 routing
+(standard OSPFv3) and 64--95 for IPv4 unicast routing.
+@quotation
+@table @w
+@item Instance ID 0--31
+IPv6 unicast AF
+
+@item Instance ID 32--63
+IPv6 multicast AF
+
+@item Instance ID 64--95
+IPv4 unicast AF
+
+@item Instance ID 96--127
+IPv4 multicast AF
+
+@item Instance ID 128--255
+Unassigned
+@end table
+@end quotation
+
+@strong{The interface configuration command @command{ipv6 ospf6
+instance-id <0-255>} is currently maintained for backwards
+compatibility but should be considered deprecated.}
+
+Note that the current implemenation only supports running a single
+OSPFv3 instance.  Different Address Families cannot be used within the
+same ospf6d process.
+
+@subsection Interoperability
+
+The @command{af-interoperability} command can be used in the
+@command{router ospf6} configuration block to enabled interoperability
+with other OSPFv3 implementations that support multiple address
+families.
+
+@deffn {OSPF6 Command} {af-interoperability} {}
+@deffnx {OSPF6 Command} {no af-interoperability} {}
+Control Address Families interoperability.
+
+When enabled, OSPFv3 support for multiple address families is
+compatible with other RFC 5838 implementations but is not backwards
+compatible with earlier releases of quagga-mobile-routing.
+
+Default: Address Families interoperability (i.e., compliance with RFC
+5838) is enabled.
+@end deffn
+
+@node Running OSPF-AF
+@section Running OSPF-AF
+
+From a vtysh or telnet terminal type:
+@example
+> show ipv6 ospf6 route
+@end example
+
+This should display the OSPFv3 routes.  If IPv4 AFs are used then the 
+routes will appear in standard IPv4 format.
+Next, type the following command for IPv4 or IPv6 
+@example
+> show ip route
+> show ipv6 route
+@end example
+
+The entries with the "*" are installed in the kernel routing
+table.  If these tables are correct then the kernel routing table 
+should be correct.  
+
+@node Open Issues
+@section Open Issues
+
+The following list includes a brief description of known issues.
+
+@itemize
+@item
+The MTU for non-IPv6 AFs is not considered according to Section 2.7 of
+@uref{http://tools.ietf.org/search/rfc5838, RFC 5838} and there is no
+support for an IPv6 MTU TLV in a link-local signaling data block.
+
+@item Enabling different AFs to run in the same ospf6d instance.
+
+RFC 5838 does not support this mode of operation and does not preclude
+future single-instance approaches that support multiple address
+families; in addition to other changes, this would require a
+separation of LSAs within the database.
+@end itemize

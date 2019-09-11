@@ -1,0 +1,4 @@
+@set UPDATED 25 July 2012
+@set UPDATED-MONTH July 2012
+@set EDITION 0.99.21mr2.2
+@set VERSION 0.99.21mr2.2

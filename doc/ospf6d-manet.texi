@@ -1,0 +1,613 @@
+@node OSPF-MANET
+@chapter OSPF-MANET
+
+@command{OSPF-MANET} is a modification of OSPF version 3 (IPv6) for use
+in mobile ad hoc networks (MANETs).  OSPF for IPv6 is described in RFC2740.
+
+This chapter is a supplement to the main quagga (@uref{http://www.quagga.net})
+documentation.  It describes the implementation, functionality, and usage
+of OSPF-MANET and related extensions.
+
+@menu
+* Overview-MANET::
+* Protocol Operation::
+* Building OSPF-MANET::
+* Configuring OSPF-MANET::
+* Showing OSPF-MANET Information::
+* Running OSPF-MANET::
+* Use with Address Families::
+* OSPF-MANET Configuration Examples::
+@end menu
+
+@node Overview-MANET
+@section Overview
+
+OSPF-MANET can be built for typical quagga usage as a standalone router
+or for support in virtual environments such as IMUNES, OpenVZ, and CORE.
+
+OSPF-MANET is defined for IPv6 (OSPFv3).  With the addition of what is
+known as the @emph{Address Families} patch, an instance of OSPF-MANET can
+also be run to build IPv4 routes.  Note that to get both IPv4 and IPv6 routing,
+two instances of OSPFv3 must be running, as presently defined by the draft
+standard.
+
+Previous versions of OSPF-MANET were distributed as a series of patches
+against a mainline quagga distribution.  
+
+@subsection Draft compliance
+
+The OSPF-MANET implementation was primarily written around the
+timeframe of the draft-ogier-manet-extension-07 draft, but has been
+updated over time towards
+@uref{http://tools.ietf.org/rfc/rfc5614.txt,,RFC5614} compliance.  The
+current implementation is not fully aligned with RFC5614 and does not
+include some optional capabilities.  Some specific issues for
+improvement are outlined below.
+@itemize @bullet
+@item
+The MDRNeighborChange interface variable (RFC5614, Section 3.1) is not
+implemented.  This results in ineffiecient, but correct, operation
+where the MDR selection process runs before sending every Hello
+packet.
+
+@item
+The MDR-Metric TLV (RFC5614, Section 4.1) is not supported which
+implies a unity link metic for all neighbors.  This might not be
+consistent with the metrics used for calculating routes and could
+result in suboptimal paths unless full-topology LSAs are used
+(LSAFullness = 4).
+
+@item
+The flooding conditions described in RFC5614 are not fully implemented
+which could lead to unnecessary flooding under certain conditions.  In
+particular, the optional non-flooding MDR check descibed in Section
+5.5 is not be performed when a router selects itself as a MDR.
+
+@item
+Non-Ackable LSAs (RFC5614, Appendix D) are unimplemented.  Non-Ackable
+LSAs are only transmitted, and retransmitted by MDRs, periodically
+using multicast and are never acknowledged.  This could provide more
+efficient flooding in some highly mobile circumstances.
+@end itemize
+
+@subsection License and Contributing Code
+This software builds on the Quagga Routing Software Suite which is
+licensed under the GNU General Public License (GPL).  Our modifications
+are also under GPL.  Therefore, please consider this work GPL'ed
+software.
+
+We would like to encourage people to send in bug fixes and extensions.
+By default, we will not include any contributed code, bug fixes, or
+patches unless you specify that you want to include said code in our
+future releases (also under GPL).
+
+@subsection Contributors
+
+The primary authors of OSPF-MDR are Richard Ogier and Phillip
+Spagnolo.  The current maintainer is Tom Goff.
+
+This software is supported and maintained as open source software by
+Boeing Research & Technology, Naval Research Laboratory, and other
+open source contributors.
+
+@node Protocol Operation
+@section Protocol Operation
+
+For now, please see
+@uref{http://hipserver.mct.phantomworks.org/ietf/ospf/milcom06.pdf} or
+Section 2 of @uref{http://tools.ietf.org/rfc/rfc5614.txt,,RFC5614}.
+
+@node Building OSPF-MANET
+@section Building OSPF-MANET
+
+To build quagga as a standalone router run:
+@verbatim
+autoreconf or ./update-autotools
+./configure --enable-user=root --enable-group=root --enable-vtysh \
+--with-cflags=-ggdb
+make
+make install
+@end verbatim
+
+To build quagga in IMUNES (or Boeing's CORE), use the following configure line:
+@verbatim
+  ./configure --enable-user=root --enable-group=root \
+       --sysconfdir=/usr/local/etc/quagga --enable-vtysh \
+       --localstatedir=/var/run/quagga --with-cflags=-ggdb
+@end verbatim
+
+@node Configuring OSPF-MANET
+@section Configuring OSPF-MANET
+
+OSPF-MANET can be configured in one of two ways:
+command line interface (CLI) or config file (ospf6d.conf).
+In either case, you must install a zebra.conf and ospf6d.conf file in
+/usr/local/etc/.
+@itemize @bullet
+@item  CLI:  run configuration commands in vtysh or telnet
+@item  put configuration commands in zebra.conf and ospf6d.conf
+@end itemize
+
+The following commands configure OSPF-MANET MDR.
+
+@subsection OSPF6 router
+
+@deffn {OSPF6 Command} {router min-lsa-arrival <0-65535>} {}
+Set the router's minimum time (in seconds) between LSA reception.
+Default 1
+@end deffn
+
+@deffn {OSPF6 Command} {router min-lsa-interval <0-65535>} {}
+Set the router's minimum time (in seconds) between LSA origination.
+Default 5
+@end deffn
+
+@subsection OSPF6 area
+
+@deffn {OSPF6 Command} {area A.B.C.D spf-delay-msec <0-10000>} {}
+Set the amount of time (in milliseconds) to delay performing a SPF
+calculation.  This allows batching operations so that a single SPF
+calculation can be done when several events or updates occur close
+together.
+
+Default: 100
+@end deffn
+
+@deffn {OSPF6 Command} {area A.B.C.D spf-holdtime-msec <0-10000>} {}
+Set the minimum time (in milliseconds) between SPF calculations.
+
+Default: 500
+@end deffn
+
+@deffn {OSPF6 Command} {area @var{a.b.c.d} loglinks (unidirectional|bidirectional) to-file @var{filename} interval <1-255> (all|connected)} {}
+Enable logging links for area @var{a.b.c.d}.  Links are logged
+periodically to @var{filename}, waiting at least the specified
+interval (in seconds) between updates.  The type of links logged is
+either @code{unidirectional} (all known links) or @code{bidirectional}
+(only links for which a reverse link is also known).  The scope of the
+logging is either @code{all} (all known links for the area) or
+@code{connected} (only links for which a route exists to the
+advertising router).
+
+The router ID of the advertising router and it's neighbor are logged
+in the following format (note the timestamp is GMT, not local time).
+@example
+Routing-Links List: 16:28:32.583109
+10.0.0.1 -> 10.0.0.2
+10.0.0.1 -> 10.0.0.5
+10.0.0.2 -> 10.0.0.5
+End of Routing-Links List.
+@end example
+
+The @code{lsafullness} interface setting impacts what links are
+advertised and then become available for logging by another router.
+@end deffn
+
+@deffn {OSPF6 Command} {no area @var{a.b.c.d} loglinks} {}
+Disable logging links for area @var{a.b.c.d}.
+@end deffn
+
+@deffn {OSPF6 Command} {area @var{a.b.c.d} logpath from @var{s.t.u.v} to @var{w.x.y.z} to-file @var{filename} interval <1-255> (always|connected)} {}
+Enable logging the shortest path from @var{s.t.u.v} to @var{w.x.y.z}
+for area @var{a.b.c.d}.  The path is logged periodically to
+@var{filename}, waiting at least the specified interval (in seconds)
+between updates.  The known shortest path can be @code{always} logged
+or only logged if @code{connected}, i.e. when a route exists to router
+@var{s.t.u.v}.
+
+The router ID of each node along the shortest path from @var{s.t.u.v}
+to @var{w.x.y.z} is logged in the following format (note the timestamp
+is GMT, not local time).
+@example
+Routing-Links List: 16:28:32.583109
+10.0.0.3 -> 10.0.0.4
+10.0.0.2 -> 10.0.0.3
+10.0.0.1 -> 10.0.0.2
+End of Routing-Links List.
+@end example
+Path links are listed in reverse order; in this example the shortest
+path from 10.0.0.1 to 10.0.0.4 is shown.
+
+Only one path can be logged at a time.
+@end deffn
+
+@deffn {OSPF6 Command} {no area @var{a.b.c.d} logpath} {}
+Disable logging a path for area @var{a.b.c.d}.
+@end deffn
+
+@subsection OSPF6 interface
+
+@deffn {Interface Command} {ipv6 ospf6 ackinterval <1-65535>} {}
+Interval of time in msec to coalesce acks.  Default 1800
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 adjacencyconnectivity (uniconnected|biconnected|fully)} {}
+Level of adjacencies between neighbors
+@table @code
+@item uniconnected
+The set of adjacencies forms a (uni)connected graph.
+
+@item biconnnected
+The set of adjacencies forms a biconnected graph.
+
+@item fullyconnected
+Adjacency reduction is not used, the router becomes adjacent with all
+of its neighbors.
+@end table
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 backupwaitinterval <1-65535>} {}
+Interval of time in msec for MBDRs to wait before flooding.  Default 2000
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 consec-hello-threshold <1-65535>} {}
+Neighbor acceptance criteria: number of consecutive hellos to move from
+Down to Init.
+Default 1
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 flood-delay <1-65535>} {}
+Time in msec to coalesce LSAs before sending.  Default 100
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 hellorepeatcount <1-65535>} {}
+Total hellos in succession that cannot be missed using differential
+hellos.  Default 3
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 linkmetric-formula (cisco|nrl-cable)} {}
+@deffnx {Interface Command} {no ipv6 ospf6 linkmetric-formula} {}
+Control using per-neighbor cost metrics based on RFC 4938 link metrics
+information provided by @command{zebra}.  The use of link metrics is
+enabled by selecting either the Cisco or NRL CABLE cost formula.
+
+Note that using this option only enables processing link metrics and
+status updates that are received for a given interface.  Update
+messages must be generated outside of Quagga and sent to
+@command{zebra} through a netlink socket.  This options is currently
+only supported on Linux and requires the @file{libnl} library.
+
+When enabled, the metric for each neighbor listed in a router's
+router-LSA is determined by the link metrics formula instead of using
+the configured interface cost.  This only affects point-to-point,
+point-to-multipoint, and manet-designated-router interfaces.
+
+The NRL CABLE cost formula is defined as @*
+@center @math{cost_{lat} = 1000 * (1-e^{-0.0015 * lat}) * (weight_{lat}/100)}
+@center @math{cost_{cdr} = 1000 * (e^{-0.0015 * cdr}) * (weight_{cdr}/100)}
+@center @math{cost = cost_{lat} + cost_{cdr}}
+where @var{lat} and @var{cdr} are the current link latency and data
+rate.
+
+See
+@uref{http://www.cisco.com/en/US/docs/ios/ipmobility/configuration/guide/imo_adhoc_rtr2rd_ps6441_TSD_Products_Configuration_Guide_Chapter.html,
+the Cisco documentation} for more information on link metrics and cost
+formula details.
+
+Default: link metrics use disabled
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 linkmetric-weight-throughput <0-100>} {}
+Set the weight of the throughput parameter used by the link metrics
+cost formula.
+
+Default: 0
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 linkmetric-weight-resources <0-100>} {}
+Set the weight of the resources parameter used by the link metrics
+cost formula.
+
+Default: 29
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 linkmetric-weight-latency <0-100>} {}
+Set the weight of the latency parameter used by the link metrics cost
+formula.
+
+Default: 29
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 linkmetric-weight-l2_factor <0-100>} {}
+Set the weight of the L2 parameter used by the link metrics cost
+formula.
+
+Default: 29
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 linkmetric-update-filter (adjust-values|)} {}
+@deffnx {Interface Command} {no ipv6 ospf6 linkmetric-update-filter} {}
+Control filtering RFC 4938 link metrics updates received from
+@command{zebra}.  Only one filter can be active at a time.  Note that
+invalid link metrics values are discarded and do not influence
+per-neighbor cost metrics.
+
+The @command{adjust-values} filter removes out-of-range link metrics
+values according to the following rules:
+@itemize
+@item Limit the `Resources' and `Relative Link Quality' values to a
+maximum of 100; any values that exceed 100 are set to 100.
+
+@item Limit the `Current data rate' (CDR) to the reported `Maximum
+data rate' (MDR); a CDR that exceeds the current MDR is set to the
+MDR.
+@end itemize
+A warning message is logged if an invalid link metrics value is
+overridden.
+
+Default: link metrics filtering is disabled
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 lsafullness (minlsa|mincostlsa|mincost2lsa|mdrfulllsa|fulllsa)} {}
+Set the level of LSA fullnes.
+@table @code
+@item minlsa
+Specify min size LSAs (only adjacent neighbors)
+
+@item mincostlsa
+Specify partial LSAs for min-hop routing
+
+@item mincost2lsa
+Specify partial LSAs for two min-hop routing paths
+
+@item mdrfulllsa
+Specify full LSAs from MDR/MBDRs
+
+@item fulllsa
+Specify full LSAs (all routable neighbors)
+@end table
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 mdrconstraint <2-3>} {}
+Set the MDRConstraint parameter for MDR redundancy, defined in section
+3.2 of RFC 5614 as:
+@example
+A parameter of the MDR selection algorithm, which affects the
+number of MDRs selected and must be an integer greater than or
+equal to 2.  The default value of 3 results in nearly the minimum
+number of MDRs.  Values larger than 3 result in slightly fewer
+MDRs, and the value 2 results in a larger number of MDRs.
+@end example
+Default 3
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 neighbor-metric-hysteresis <1-65535>} {}
+Set the hysteresis parameter used when per-neighbor cost metrics are
+enabled.  When then cost metric for a neighbor is updated, a new LSA
+update is scheduled if the magnitude of the change equals or exceeds
+the given hysteresis value.  A new LSA update is always scheduled when
+a neighbor's cost metric becomes the minimum cost for the interface.
+
+Default: 1
+@end deffn
+
+@deffn {Interface Command} {no ipv6 ospf6 neighbor-metric} {}
+Disable using per-neighbor cost metrics for an interface.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 neighbor-cost A.B.C.D <1-65535>} {}
+Enable using a static per-neighbor cost metric for the given neighbor.
+When the given router-id is a neighbor, the cost metric for the
+neighbor is set to the given value.
+@end deffn
+
+@deffn {Interface Command} {no ipv6 ospf6 neighbor-cost [A.B.C.D]} {}
+Disable using a static per-neighbor cost metric for the given
+neighbor, or all neighbors when a router-id is omitted.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 periodic-metric-function neighbor-time [<0-65535> recalculate-interval <1-65535>]} {}
+@deffnx {Interface Command} {no ipv6 ospf6 periodic-metric-function} {}
+Control using per-neighbor cost metrics based on the neighbor-time
+periodic metric function.  The neighbor-time periodic metric function
+makes the cost to each neighbor inversely proportional to the time it
+has been in the full state.  The optional parameters are:
+@table @code
+@item maximum-metric-offset
+The initial cost for each neighbor; this is equivalent to the number of
+hellos sent before reaching the minimum metric value (the configured
+interface cost).
+
+@item recalculate-interval
+How often the cost for all neighbors are recomputed.  The default
+recalculate interval is the OSPF Dead Interval for the interface.
+@end table
+@end deffn
+
+This was introduced to stabilize unicast forwarding paths when the
+network is dynamic.  It introduces a dynamic cost that is initially high
+when a neighbor relationship is added to the Dijkstra computation, and
+decays as the neighbor relationship persists. The arguments control the
+behavior of the cost decay function, as well as the frequency with which
+the cost is updated (since too many cost updates can flood the network
+with lots of LSA updates).
+
+If the @code{neighbor-time} periodic metric function is
+enabled, the next argument is an integer that is the maximum metric
+offset used in the metric computation. The neighbor-time metric function
+ranges between the OSPFv3 interface cost (minimum) and a quantity that
+is equal to the maximum metric offset minus the time in seconds since
+the last LSA change, divided (integer division) by the time in seconds
+for the OSPFv3 Hello interval. When a neighbor relationship is added to
+the path computation, its initial metric is this larger value and it
+decays over time to the configured OSPFv3 interface cost, thereby
+reducing cost for longer duration links.  The third argument,
+@code{recalculate-interval}, controls the minimum time between periodic
+metric function calculations. Note that if OSPFv3 decides to issue an
+LSA update for other reasons such as a neighbor state change, this
+scheduled metric function calculation timer is restarted; hence, it only
+plays a role when neighbor relationships are stable and the costs to all
+neighbors are decaying.
+
+@deffn {Interface Command} {ipv6 ospf6 network (broadcast|non-broadcast|point-to-multipoint|point-to-point|loopback|manet-designated-router)} {}
+Underlying network type:
+@table @code
+@item broadcast
+Specify OSPF6 broadcast multi-access network
+
+@item non-broadcast
+Specify OSPF6 NBMA network
+
+@item point-to-multipoint
+Specify OSPF6 point-to-multipoint network
+
+@item point-to-point
+Specify OSPF6 point-to-point network
+
+@item loopback
+Specify OSPF6 loopback
+
+@item manet-designated-router
+Specify OSPF6 manet-designated-router (MDR) network
+@end table
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 twohoprefresh <1-65535>} {}
+Configure how often full Hellos are sent.  Every @var{twohoprefresh}
+Hello sent will be a full Hello, with differential Hellos sent in
+between.  A value of 1 disables the use of differential Hellos.
+
+Default: 1
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 smf-mdr @var{FILENAME}} {}
+@deffnx {Interface Command} {no ipv6 ospf6 smf-mdr} {}
+Control if SMF uses the OSPF-MANET MDR relay set.
+
+When enabled, the given filename specifies a unix domain socket to use
+for communication.  This should correspond to the instance
+command-line option given to @command{nrlsmf}.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 min-smf-relay-mdr-level (MDR|BMDR)} {}
+Experimental: When allowing SMF to use the OSPF-MANET MDR relay set,
+it specifies which state, MDR or BMDR, will be sufficient for
+triggering SMF forwarding.
+
+Default: MDR
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 min-smf-relay-neighbor-count <1-2>} {}
+Experimental: When allowing SMF to use the OSPF-MANET MDR relay set,
+it specifies whether leaf nodes - that have only 1 neighbor - can be
+SMF forwarders.
+
+Default: 2
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 smf-relay-isolated} {}
+@deffnx {Interface Command} {no ipv6 ospf6 smf-relay-isolated} {}
+Experimental: When allowing SMF to use the OSPF-MANET MDR relay set,
+it enables isolated nodes - that have no neighbors - to be SMF
+forwarders.
+
+Default: disabled
+@end deffn
+
+
+@node Showing OSPF-MANET Information
+@section Showing OSPF-MANET Information
+
+@deffn {Command} {show ipv6 ospf6 neighbor-linkmetrics [A.B.C.D]} {}
+Show the current RFC 4938 link metrics values for the given neighbor,
+or all neighbors (with link metrics enabled) when no router-id is
+given.
+@end deffn
+
+@deffn {Command} {show ipv6 ospf6 neighbor-cost [A.B.C.D]} {}
+Show the current cost metric for the specified neighbor.  The cost for
+all neighbors is shown when no router-id is given.
+@end deffn
+
+@deffn {Command} {show ipv6 ospf6 neighbor mdrdetail [A.B.C.D]} {}
+Show OSPF-MDR state information for the specified neighbor.
+Information for all OSPF-MDR neighbors is shown when no router-id is
+given.
+@end deffn
+
+
+@node Running OSPF-MANET
+@section Running OSPF-MANET
+
+Run the following commands for the command prompt:
+@verbatim
+/usr/local/sbin/zebra -d
+/usr/local/sbin/ospf6d -d
+@end verbatim
+
+To verify OSPF-MANET is running, from a vtysh or telnet terminal type:
+@verbatim
+  > show ipv6 ospf6 route
+@end verbatim
+
+This should display the OSPFv3 routes.  If IPv4 AFs are used then the
+route will appear as an IPv6 route with zeros before the IPv4 route.
+Next, type the following command for IPv4 or IPv6
+@verbatim
+  > show ip route
+  > show ipv6 route
+@end verbatim
+
+The entries with the "*" are going to be installed in the kernel routingtable.  If these tables are correct then the kernel routing table should be correct.
+
+@node Use with Address Families
+@section Use with Address Families
+
+To use OSPF MANET to carry IPv4 prefix information, one may enable it
+with the following configuration.
+
+In the router definition section, define an instance-id between 64
+and 95.  Such as:
+
+@verbatim
+router ospf6
+  ...
+  instance-id 65
+  ...
+@end verbatim
+
+@subsection Redistribution between OSPFv2 and OSPFv3 MANET
+
+(to be completed)
+
+@node OSPF-MANET Configuration Examples
+@section OSPF-MANET Configuration Examples
+
+Here is an example of an interface declaration of an OSPF-MANET interface,
+from the @code{ospf6d.conf} file.
+
+@example
+interface ath0
+  ipv6 ospf6 priority 1
+  ipv6 ospf6 transmit-delay 1
+  ipv6 ospf6 ifmtu 1500
+  ipv6 ospf6 cost 1
+  ipv6 ospf6 hello-interval 2
+  ipv6 ospf6 dead-interval 6
+  ipv6 ospf6 retransmit-interval 5
+  ipv6 ospf6 network manet-designated-router
+  ipv6 ospf6 ackinterval 1800
+  ipv6 ospf6 backupwaitinterval 2000
+  ipv6 ospf6 twohoprefresh 3
+  ipv6 ospf6 hellorepeatcount 3
+  ipv6 ospf6 adjacencyconnectivity biconnected
+  ipv6 ospf6 lsafullness mdrfulllsa
+  ipv6 ospf6 flood-delay 100
+!
+@end example
+
+The below router declaration example tells quagga to run OSPF-MANET on
+interface ath0 and to redistribute OSPF and connected networks.  It
+also sets the IPv6 traffic class to 184 (DSCP value 46, Expedited
+Forwarding).
+
+@example
+router ospf6
+ instance-id 65
+ router-id 10.1.0.1
+ interface ath0 area 0.0.0.0
+ protocol-traffic-class 184
+ redistribute ospf
+ redistribute connected
+!
+@end example
