@@ -91,7 +91,7 @@ ospf6_interface_lsdb_hook (struct ospf6_lsa *lsa)
     {
       case OSPF6_LSTYPE_LINK:
         if (OSPF6_INTERFACE (lsa->lsdb->data)->state == OSPF6_INTERFACE_DR)
-          OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT (OSPF6_INTERFACE (lsa->lsdb->data));
+          ospf6_intra_prefix_lsa_schedule_transit (OSPF6_INTERFACE (lsa->lsdb->data));
         ospf6_spf_schedule (OSPF6_INTERFACE (lsa->lsdb->data)->area);
         break;
 
@@ -141,7 +141,7 @@ ospf6_interface_create (struct interface *ifp)
   oi->flag = 0;
   oi->mtu_ignore = 0;
 
-  oi->flood_delay = 100;        //msec
+  oi->flood_delay = OSPF6_INTERFACE_FLOOD_DELAY;        //msec
 
   if (if_is_broadcast (ifp))
     oi->type = OSPF6_IFTYPE_BROADCAST;
@@ -205,14 +205,28 @@ ospf6_interface_create (struct interface *ifp)
   return oi;
 }
 
+static void
+ospf6_interface_delete_neighbors (struct ospf6_interface *oi)
+{
+  struct list *neighbor_list;
+
+  neighbor_list = oi->neighbor_list;
+  while (!list_isempty (neighbor_list))
+    {
+      struct ospf6_neighbor *on;
+
+      on = listnode_head (neighbor_list);
+      listnode_delete (neighbor_list, on);
+      ospf6_neighbor_delete (on);
+    }
+}
+
 void
 ospf6_interface_delete (struct ospf6_interface *oi)
 {
-  struct listnode *node, *nnode;
-  struct ospf6_neighbor *on;
+  struct listnode *node;
 
-  for (ALL_LIST_ELEMENTS (oi->neighbor_list, node, nnode, on))
-      ospf6_neighbor_delete (on);
+  ospf6_interface_delete_neighbors (oi);
 
   for (node = listtail (&ospf6_interface_operations_list);
        node != NULL; node = node->prev)
@@ -231,6 +245,9 @@ ospf6_interface_delete (struct ospf6_interface *oi)
   THREAD_OFF (oi->thread_send_hello);
   THREAD_OFF (oi->thread_send_lsupdate);
   THREAD_OFF (oi->thread_send_lsack);
+  THREAD_OFF (oi->thread_network_lsa);
+  THREAD_OFF (oi->thread_link_lsa);
+  THREAD_OFF (oi->thread_intra_prefix_lsa);
 
   ospf6_lsdb_remove_all (oi->lsdb);
   ospf6_lsdb_remove_all (oi->lsupdate_list);
@@ -267,6 +284,28 @@ ospf6_interface_delete (struct ospf6_interface *oi)
   list_delete (oi->private_data_list);
 
   XFREE (MTYPE_OSPF6_IF, oi);
+}
+
+static void
+ospf6_interface_configure_defaults (struct ospf6_interface *oi)
+{
+  if (oi->type == OSPF6_IFTYPE_MDR)
+    {
+      ospf6_mdr_interface_configure_defaults (oi);
+      return;
+    }
+
+  if (!(oi->config_status & HELLO_INTERVAL_CONFIGURED))
+    oi->hello_interval = OSPF6_INTERFACE_HELLO_INTERVAL;
+
+  if (!(oi->config_status & DEAD_INTERVAL_CONFIGURED))
+    oi->dead_interval = OSPF6_INTERFACE_DEAD_INTERVAL;
+
+  if (!(oi->config_status & RXMT_INTERVAL_CONFIGURED))
+    oi->rxmt_interval = OSPF6_INTERFACE_RXMT_INTERVAL;
+
+  if (!(oi->config_status & LINK_LSA_SUPPRESSION_CONFIGURED))
+    oi->LinkLSASuppression = 0;
 }
 
 int
@@ -344,18 +383,14 @@ ospf6_interface_enable (struct ospf6_interface *oi)
 static void
 __ospf6_interface_disable (struct ospf6_interface *oi)
 {
-  struct listnode *node, *nnode;
-  struct ospf6_neighbor *on;
-
   /* Leave AllSPFRouters */
   if (oi->state > OSPF6_INTERFACE_LOOPBACK)
     ospf6_sso (oi->interface->ifindex, &allspfrouters6, IPV6_LEAVE_GROUP);
 
   ospf6_interface_state_change (OSPF6_INTERFACE_DOWN, oi);
 
-  for (ALL_LIST_ELEMENTS (oi->neighbor_list, node, nnode, on))
-    ospf6_neighbor_delete (on);
-  list_delete_all_node (oi->neighbor_list);
+  /* delete all neighbors */
+  ospf6_interface_delete_neighbors (oi);
 
   ospf6_lsdb_remove_all (oi->lsdb);
   ospf6_lsdb_remove_all (oi->lsdb_self);
@@ -365,6 +400,9 @@ __ospf6_interface_disable (struct ospf6_interface *oi)
   THREAD_OFF (oi->thread_send_hello);
   THREAD_OFF (oi->thread_send_lsupdate);
   THREAD_OFF (oi->thread_send_lsack);
+  THREAD_OFF (oi->thread_network_lsa);
+  THREAD_OFF (oi->thread_link_lsa);
+  THREAD_OFF (oi->thread_intra_prefix_lsa);
 }
 
 void
@@ -510,7 +548,15 @@ ospf6_interface_connected_route_update (struct interface *ifp)
   if (oi == NULL)
     return;
 
-  if (oi->area == NULL || oi->type == OSPF6_IFTYPE_LOOPBACK ||
+  /* reset linklocal pointer */
+  oi->linklocal_addr = ospf6_interface_get_linklocal_address (ifp);
+  oi->linklocal_addr_ipv4 = NULL;
+
+  /* if area is null, do not make connected-route list */
+  if (oi->area == NULL)
+    return;
+
+  if (oi->type == OSPF6_IFTYPE_LOOPBACK ||
       CHECK_FLAG (oi->flag, OSPF6_INTERFACE_PASSIVE))
     nonactive = true;
   else
@@ -520,14 +566,6 @@ ospf6_interface_connected_route_update (struct interface *ifp)
     prev_has_linklocal_addr = true;
   else
     prev_has_linklocal_addr = false;
-
-  /* reset linklocal pointer */
-  oi->linklocal_addr = ospf6_interface_get_linklocal_address (ifp);
-  oi->linklocal_addr_ipv4 = NULL;
-
-  /* if area is null, do not make connected-route list */
-  if (oi->area == NULL)
-    return;
 
   /* update "route to advertise" interface route table */
   ospf6_route_remove_all (oi->route_connected);
@@ -697,9 +735,9 @@ ospf6_interface_connected_route_update (struct interface *ifp)
     }
 
   /* create new Link-LSA */
-  OSPF6_LINK_LSA_SCHEDULE (oi);
-  OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT (oi);
-  OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB (oi->area);
+  ospf6_link_lsa_schedule (oi);
+  ospf6_intra_prefix_lsa_schedule_transit (oi);
+  ospf6_intra_prefix_lsa_schedule_stub (oi->area);
 }
 
 bool
@@ -775,19 +813,19 @@ ospf6_interface_state_change (u_char next_state, struct ospf6_interface *oi)
        next_state == OSPF6_INTERFACE_BDR))
     ospf6_sso (oi->interface->ifindex, &alldrouters6, IPV6_JOIN_GROUP);
 
-  OSPF6_ROUTER_LSA_SCHEDULE (oi->area);
+  ospf6_router_lsa_schedule (oi->area);
   if (next_state == OSPF6_INTERFACE_DOWN)
     {
-      OSPF6_NETWORK_LSA_EXECUTE (oi);
-      OSPF6_INTRA_PREFIX_LSA_EXECUTE_TRANSIT (oi);
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB (oi->area);
+      ospf6_network_lsa_execute (oi);
+      ospf6_intra_prefix_lsa_execute_transit (oi);
+      ospf6_intra_prefix_lsa_schedule_stub (oi->area);
     }
   else if (prev_state == OSPF6_INTERFACE_DR ||
            next_state == OSPF6_INTERFACE_DR)
     {
-      OSPF6_NETWORK_LSA_SCHEDULE (oi);
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT (oi);
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB (oi->area);
+      ospf6_network_lsa_schedule (oi);
+      ospf6_intra_prefix_lsa_schedule_transit (oi);
+      ospf6_intra_prefix_lsa_schedule_stub (oi->area);
     }
 }
 
@@ -1585,11 +1623,11 @@ DEFUN (ipv6_ospf6_cost,
   /* execute LSA hooks */
   if (oi->area)
     {
-      OSPF6_LINK_LSA_SCHEDULE (oi);
-      OSPF6_ROUTER_LSA_SCHEDULE (oi->area);
-      OSPF6_NETWORK_LSA_SCHEDULE (oi);
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT (oi);
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB (oi->area);
+      ospf6_link_lsa_schedule (oi);
+      ospf6_router_lsa_schedule (oi->area);
+      ospf6_network_lsa_schedule (oi);
+      ospf6_intra_prefix_lsa_schedule_transit (oi);
+      ospf6_intra_prefix_lsa_schedule_stub (oi->area);
     }
 
   for (ALL_LIST_ELEMENTS_RO (&ospf6_interface_operations_list, node, ops))
@@ -1615,6 +1653,8 @@ DEFUN (ipv6_ospf6_hellointerval,
   oi = ospf6_interface_vtyget (vty);
 
   oi->hello_interval = strtol (argv[0], NULL, 10);
+  oi->config_status |= HELLO_INTERVAL_CONFIGURED;
+
   return CMD_SUCCESS;
 }
 
@@ -1647,6 +1687,7 @@ DEFUN (ipv6_ospf6_link_lsa_suppression,
   oi = ospf6_interface_vtyget (vty);
 
   oi->LinkLSASuppression = 1;
+  oi->config_status |= LINK_LSA_SUPPRESSION_CONFIGURED;
 
   return CMD_SUCCESS;
 }
@@ -1664,6 +1705,7 @@ DEFUN (no_ipv6_ospf6_link_lsa_suppression,
   oi = ospf6_interface_vtyget (vty);
 
   oi->LinkLSASuppression = 0;
+  oi->config_status |= LINK_LSA_SUPPRESSION_CONFIGURED;
 
   return CMD_SUCCESS;
 }
@@ -1683,6 +1725,8 @@ DEFUN (ipv6_ospf6_deadinterval,
   oi = ospf6_interface_vtyget (vty);
 
   oi->dead_interval = strtol (argv[0], NULL, 10);
+  oi->config_status |= DEAD_INTERVAL_CONFIGURED;
+
   return CMD_SUCCESS;
 }
 
@@ -1728,6 +1772,7 @@ DEFUN (ipv6_ospf6_retransmitinterval,
     }
 
   oi->rxmt_interval = tmp;
+  oi->config_status |= RXMT_INTERVAL_CONFIGURED;
 
   return CMD_SUCCESS;
 }
@@ -1904,13 +1949,13 @@ DEFUN (ipv6_ospf6_advertise_prefix_list,
 
   if (oi->area)
     {
-      OSPF6_LINK_LSA_SCHEDULE (oi);
+      ospf6_link_lsa_schedule (oi);
       if (oi->state == OSPF6_INTERFACE_DR)
         {
-          OSPF6_NETWORK_LSA_SCHEDULE (oi);
-          OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT (oi);
+          ospf6_network_lsa_schedule (oi);
+          ospf6_intra_prefix_lsa_schedule_transit (oi);
         }
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB (oi->area);
+      ospf6_intra_prefix_lsa_schedule_stub (oi->area);
     }
 
   return CMD_SUCCESS;
@@ -1936,8 +1981,6 @@ DEFUN (ipv6_ospf6_network,
 
   oi = ospf6_interface_vtyget (vty);
 
-  oi->LinkLSASuppression = 0;
-
   arglen = strlen (argv[0]);
 
   if (strncmp (argv[0], "broadcast", arglen) == 0)
@@ -1960,8 +2003,7 @@ DEFUN (ipv6_ospf6_network,
 
   oi->type = type;
 
-  if (oi->type == OSPF6_IFTYPE_MDR)
-    ospf6_mdr_interface_configure_defaults (oi);
+  ospf6_interface_configure_defaults (oi);
 
   if (oi->state > OSPF6_INTERFACE_DOWN)
     {
@@ -2028,13 +2070,13 @@ DEFUN (no_ipv6_ospf6_advertise_prefix_list,
 
   if (oi->area)
     {
-      OSPF6_LINK_LSA_SCHEDULE (oi);
+      ospf6_link_lsa_schedule (oi);
       if (oi->state == OSPF6_INTERFACE_DR)
         {
-          OSPF6_NETWORK_LSA_SCHEDULE (oi);
-          OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT (oi);
+          ospf6_network_lsa_schedule (oi);
+          ospf6_intra_prefix_lsa_schedule_transit (oi);
         }
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB (oi->area);
+      ospf6_intra_prefix_lsa_schedule_stub (oi->area);
     }
 
   return CMD_SUCCESS;
@@ -2068,15 +2110,24 @@ config_write_ospf6_interface (struct vty *vty)
         vty_out (vty, " ipv6 ospf6 cost %d%s",
                  oi->cost, VNL);
 
-      if (oi->hello_interval != OSPF6_INTERFACE_HELLO_INTERVAL)
+      if ((oi->type != OSPF6_IFTYPE_MDR &&
+           oi->hello_interval != OSPF6_INTERFACE_HELLO_INTERVAL) ||
+          (oi->type == OSPF6_IFTYPE_MDR &&
+           oi->hello_interval != OSPF6_MDR_HELLO_INTERVAL))
         vty_out (vty, " ipv6 ospf6 hello-interval %d%s",
                  oi->hello_interval, VNL);
 
-      if (oi->dead_interval != OSPF6_INTERFACE_DEAD_INTERVAL)
+      if ((oi->type != OSPF6_IFTYPE_MDR &&
+           oi->dead_interval != OSPF6_INTERFACE_DEAD_INTERVAL) ||
+          (oi->type == OSPF6_IFTYPE_MDR &&
+           oi->dead_interval != OSPF6_MDR_DEAD_INTERVAL))
         vty_out (vty, " ipv6 ospf6 dead-interval %d%s",
                  oi->dead_interval, VNL);
 
-      if (oi->rxmt_interval != OSPF6_INTERFACE_RXMT_INTERVAL)
+      if ((oi->type != OSPF6_IFTYPE_MDR &&
+           oi->rxmt_interval != OSPF6_INTERFACE_RXMT_INTERVAL) ||
+          (oi->type == OSPF6_IFTYPE_MDR &&
+           oi->rxmt_interval != OSPF6_MDR_RXMT_INTERVAL))
         vty_out (vty, " ipv6 ospf6 retransmit-interval %d%s",
                  oi->rxmt_interval, VNL);
 
@@ -2091,7 +2142,8 @@ config_write_ospf6_interface (struct vty *vty)
       switch (oi->type)
         {
         case OSPF6_IFTYPE_BROADCAST:
-          vty_out (vty, " ipv6 ospf6 network broadcast%s", VNL);
+          if (oi && !if_is_broadcast (oi->interface))
+            vty_out (vty, " ipv6 ospf6 network broadcast%s", VNL);
           break;
         case OSPF6_IFTYPE_NBMA:
           vty_out (vty, " ipv6 ospf6 network non-broadcast%s", VNL);
@@ -2100,7 +2152,8 @@ config_write_ospf6_interface (struct vty *vty)
           vty_out (vty, " ipv6 ospf6 network point-to-multipoint%s", VNL);
           break;
         case OSPF6_IFTYPE_POINTOPOINT:
-          vty_out (vty, " ipv6 ospf6 network point-to-point %s", VNL);
+          if (!oi || !if_is_pointopoint (oi->interface))
+            vty_out (vty, " ipv6 ospf6 network point-to-point %s", VNL);
           break;
         case OSPF6_IFTYPE_LOOPBACK:
           vty_out (vty, " ipv6 ospf6 network loopback%s", VNL);
@@ -2112,10 +2165,13 @@ config_write_ospf6_interface (struct vty *vty)
 	  assert (0);
 	}
 
-      vty_out (vty, " ipv6 ospf6 flood-delay %d%s", oi->flood_delay, VNL);
+      if (oi->flood_delay != OSPF6_INTERFACE_FLOOD_DELAY)
+        vty_out (vty, " ipv6 ospf6 flood-delay %d%s", oi->flood_delay, VNL);
 
-      if (oi->LinkLSASuppression)
+      if (oi->type != OSPF6_IFTYPE_MDR && oi->LinkLSASuppression)
 	vty_out (vty, " ipv6 ospf6 link-lsa-suppression%s", VNL);
+      else if (oi->type == OSPF6_IFTYPE_MDR && !oi->LinkLSASuppression)
+	vty_out (vty, " no ipv6 ospf6 link-lsa-suppression%s", VNL);
 
       if (oi->plist_name)
         vty_out (vty, " ipv6 ospf6 advertise prefix-list %s%s",

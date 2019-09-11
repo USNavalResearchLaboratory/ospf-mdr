@@ -1510,9 +1510,6 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
 		    {
 		    case NEXTHOP_TYPE_IFINDEX:
 		    case NEXTHOP_TYPE_IFNAME:
-		    case NEXTHOP_TYPE_IPV4_IFINDEX:
-		    case NEXTHOP_TYPE_IPV6_IFINDEX:
-		    case NEXTHOP_TYPE_IPV6_IFNAME:
 		      req.r.rtm_scope = RT_SCOPE_LINK;
 		      break;
 
@@ -1591,9 +1588,6 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
 		    {
 		    case NEXTHOP_TYPE_IFINDEX:
 		    case NEXTHOP_TYPE_IFNAME:
-		    case NEXTHOP_TYPE_IPV4_IFINDEX:
-		    case NEXTHOP_TYPE_IPV6_IFINDEX:
-		    case NEXTHOP_TYPE_IPV6_IFNAME:
 		      req.r.rtm_scope = RT_SCOPE_LINK;
 		      break;
 
@@ -2055,5 +2049,5 @@ kernel_init (void)
       thread_add_read (zebrad.master, kernel_read, NULL, netlink.sock);
     }
 
-  linkmetrics_netlink_init ();
+  linkmetrics_netlink_init (LMGENL_FAMILY_NAME, LMGENL_MCGROUP_NAME);
 }

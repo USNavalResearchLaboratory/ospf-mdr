@@ -65,8 +65,6 @@ extern void ospf6_install_lsa (struct ospf6_lsa *lsa);
 extern int config_write_ospf6_debug_flood (struct vty *vty);
 extern void install_element_ospf6_debug_flood (void);
 
-void ospf6_lsa_list_delete (void *data);
-
 #endif /* OSPF6_FLOOD_H */
 
 

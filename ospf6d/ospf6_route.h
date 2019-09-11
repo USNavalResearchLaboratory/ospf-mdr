@@ -47,8 +47,6 @@ struct ospf6_nexthop
 
   /* IP address, if any */
   struct in6_addr address;
-
-  bool directly_connected;
 };
 
 #define ospf6_nexthop_is_set(x)                                \
@@ -276,8 +274,9 @@ extern struct ospf6_route *ospf6_route_match_next (struct prefix *prefix,
 extern void ospf6_route_remove_all (struct ospf6_route_table *);
 extern struct ospf6_route_table *ospf6_route_table_create (int s, int t);
 extern void ospf6_route_table_delete (struct ospf6_route_table *);
-extern void ospf6_route_dump (struct ospf6_route_table *table);
 
+extern bool ospf6_route_directly_connected (struct prefix *destprefix,
+                                            struct ospf6_nexthop *nexthop);
 
 extern void ospf6_route_show (struct vty *vty, struct ospf6_route *route);
 extern void ospf6_route_show_detail (struct vty *vty, struct ospf6_route *route);

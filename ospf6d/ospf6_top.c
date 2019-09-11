@@ -155,9 +155,6 @@ ospf6_create (void)
 
   o->external_id_table = route_table_init ();
 
-  o->delayed_lsa_list = list_new ();
-  o->delayed_lsa_list->del = ospf6_lsa_list_delete;
-
   o->instance_id = OSPF6_INSTANCE_ID;
 
   o->min_lsa_arrival = MIN_LS_ARRIVAL;
@@ -195,8 +192,6 @@ ospf6_delete (struct ospf6 *o)
   route_table_finish (o->external_id_table);
 
   ospf6_asbr_delete (o);
-
-  list_delete (o->delayed_lsa_list);
 
   XFREE (MTYPE_OSPF6_TOP, o);
 }
@@ -246,8 +241,6 @@ ospf6_disable (struct ospf6 *o)
 
       route_table_finish (o->external_id_table);
       o->external_id_table = route_table_init ();
-
-      list_delete_all_node (o->delayed_lsa_list);
     }
 }
 

@@ -1876,9 +1876,11 @@ DEFUN (show_ipv6_ospf6_linkstate_detail,
 }
 
 /* Install ospf related commands. */
-void
+int
 ospf6_init (void)
 {
+  int err;
+
   ospf6_top_init ();
   ospf6_area_init ();
   ospf6_interface_init ();
@@ -2006,8 +2008,13 @@ ospf6_init (void)
   INSTALL (ENABLE, database_asymmetric_links_cmd);
 
   /* Make ospf protocol socket. */
-  ospf6_serv_sock ();
+  err = ospf6_serv_sock ();
+  if (err)
+    return err;
+
   thread_add_read (master, ospf6_receive, NULL, ospf6_sock);
+
+  return 0;
 }
 
 long elapsed_sec (struct timeval *t)

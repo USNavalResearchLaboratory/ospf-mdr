@@ -26,6 +26,11 @@
 
 #include <stdbool.h>
 
+/* default values from RFC 5614, Section 3.2 */
+#define OSPF6_MDR_HELLO_INTERVAL	2
+#define OSPF6_MDR_DEAD_INTERVAL		6
+#define OSPF6_MDR_RXMT_INTERVAL		7
+
 #define OSPF6_OTHER       0
 #define OSPF6_BMDR        1
 #define OSPF6_MDR         2

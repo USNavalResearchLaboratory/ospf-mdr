@@ -61,11 +61,7 @@ ospf6_remove_hook (struct list *hooklist, void *hook)
       break;
 
   if (!node)
-    {
-      zlog_err ("%s: hook %p not found in hook list %p",
-		__func__, hook, hooklist);
-      return -1;
-    }
+    return -1;
 
   list_delete_node (hooklist, node);
 

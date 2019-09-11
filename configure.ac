@@ -7,7 +7,7 @@
 ##
 AC_PREREQ(2.53)
 
-AC_INIT(Quagga, 0.99.21mr2.2, [https://bugzilla.quagga.net])
+AC_INIT(Quagga, 0.99.21mr2.2-dev, [https://bugzilla.quagga.net])
 AC_CONFIG_SRCDIR(lib/zebra.h)
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -1472,20 +1472,46 @@ if test "${enable_capabilities}" != "no"; then
 fi
 AC_SUBST(LIBCAP)
 
-dnl ---------------
-dnl check for libnl
-dnl ---------------
-AC_CHECK_LIB(nl, genl_connect, [
-    AC_DEFINE(HAVE_LIBNL,,netlink library)
-    LIBNL="-lnl"
-    libnl=yes
-  ], [
-    AC_MSG_WARN([*** libnl not found (used for link status/metrics messages) ***])
-    libnl=no
-  ]
+dnl ---------------------------------
+dnl check for generic netlink library
+dnl ---------------------------------
+AC_ARG_WITH(generic_netlink,
+  AS_HELP_STRING([--without-generic_netlink],
+    [Do not use generic netlink (needed for link status/metrics messages)]),
+  [],
+  [with_generic_netlink=yes]
 )
-AM_CONDITIONAL([LIBNL], [test x$libnl = xyes])
-AC_SUBST(LIBNL)
+libnlgenl=no
+if test "$with_generic_netlink" = "yes"; then
+  PKG_PROG_PKG_CONFIG
+  PKG_CHECK_MODULES(GENL, [libnl-genl-3.0 >= 3.0.0],
+    [
+      libnlgenl=yes
+    ],
+    [
+      AC_MSG_WARN($GENL_PKG_ERRORS)
+      AC_CHECK_LIB(nl-genl, genl_connect,
+	[
+	  GENL_LIBS="-lnl-genl"
+	  AC_SUBST(GENL_LIBS)
+	  GENL_CFLAGS=""
+	  AC_SUBST(GENL_CFLAGS)
+	  libnlgenl=yes
+	],
+	[
+	  AC_MSG_WARN([*** generic netlink library not found (used for link status/metrics messages) ***])
+	]
+      )
+    ]
+  )
+fi
+if test "$libnlgenl" = "yes"; then
+    AC_DEFINE(HAVE_LIBNLGENL,1,generic netlink library)
+fi
+
+dnl check if ldconfig should be run as part of 'make install'
+AM_CONDITIONAL([POST_INSTALL_LDCONFIG],
+    [test x"$opsys" = x"gnu-linux" -a x"$cross_compiling" != x"yes"])
 
 dnl ---------------------------
 dnl check for glibc 'backtrace'
@@ -1625,6 +1651,7 @@ AC_CONFIG_FILES([Makefile lib/Makefile zebra/Makefile ripd/Makefile
 	  pkgsrc/bgpd.sh pkgsrc/ospf6d.sh pkgsrc/ospfd.sh
 	  pkgsrc/ripd.sh pkgsrc/ripngd.sh pkgsrc/zebra.sh])
 AC_CONFIG_FILES([solaris/Makefile])
+AC_CONFIG_FILES([debian/Makefile])
 
 AC_CONFIG_FILES([vtysh/extract.pl],[chmod +x vtysh/extract.pl])
 ## Hack, but working solution to avoid rebuilding of quagga.info.
@@ -1650,8 +1677,8 @@ group to run as		: ${enable_group}
 group for vty sockets	: ${enable_vty_group}
 config file mask        : ${enable_configfile_mask}
 log file mask           : ${enable_logfile_mask}
-libnl (support for      : ${libnl}
-  RFC 4938 link metrics)
+generic netlink         : ${libnlgenl}
+  (support for RFC 4938 link metrics)
 
 The above user and group must have read/write access to the state file
 directory and to the config files in the config file directory."

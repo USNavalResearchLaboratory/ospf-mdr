@@ -1,0 +1,17 @@
+# valgrind suppression file
+
+{
+  __nss_lookup_function leaks
+  Memcheck:Leak
+  fun:malloc
+  ...
+  fun:__nss_lookup_function
+}
+
+{
+  __nss_database_lookup leaks
+  Memcheck:Leak
+  fun:malloc
+  ...
+  fun:__nss_database_lookup
+}

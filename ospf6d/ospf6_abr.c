@@ -78,7 +78,7 @@ ospf6_abr_enable_area (struct ospf6_area *area)
   for (ALL_LIST_ELEMENTS (area->ospf6->area_list, node, nnode, oa))
     {
       /* update B bit for each area */
-      OSPF6_ROUTER_LSA_SCHEDULE (oa);
+      ospf6_router_lsa_schedule (oa);
 
       /* install other area's configured address range */
       if (oa != area)
@@ -136,7 +136,7 @@ ospf6_abr_disable_area (struct ospf6_area *area)
   /* Schedule Router-LSA for each area (ABR status may change) */
   for (ALL_LIST_ELEMENTS (area->ospf6->area_list, node, nnode, oa))
     /* update B bit for each area */
-    OSPF6_ROUTER_LSA_SCHEDULE (oa);
+    ospf6_router_lsa_schedule (oa);
 }
 
 static int
@@ -682,7 +682,7 @@ ospf6_abr_examin_summary (struct ospf6_lsa *lsa, struct ospf6_area *oa)
 
       /* check prefix address family */
       if (ospf6_af_validate_prefix (oa->ospf6,
-				    &prefix.u.prefix6, prefix.prefixlen))
+				    &prefix.u.prefix6, prefix.prefixlen, false))
 	{
 	  char buf[PREFIXSTRLEN];
 	  prefix2str (&prefix, buf, sizeof(buf));

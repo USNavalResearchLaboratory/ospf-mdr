@@ -147,54 +147,19 @@ struct ospf6_intra_prefix_lsa
 };
 
 
-#define OSPF6_ROUTER_LSA_SCHEDULE(oa) \
-  do { \
-    if (! (oa)->thread_router_lsa) \
-      (oa)->thread_router_lsa = \
-        thread_add_event (master, ospf6_router_lsa_originate, oa, 0); \
-  } while (0)
-#define OSPF6_NETWORK_LSA_SCHEDULE(oi) \
-  do { \
-    if (! (oi)->thread_network_lsa) \
-      (oi)->thread_network_lsa = \
-        thread_add_event (master, ospf6_network_lsa_originate, oi, 0); \
-  } while (0)
-#define OSPF6_LINK_LSA_SCHEDULE(oi) \
-  do { \
-    if (! (oi)->thread_link_lsa) \
-      (oi)->thread_link_lsa = \
-        thread_add_event (master, ospf6_link_lsa_originate, oi, 0); \
-  } while (0)
-#define OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB(oa) \
-  do { \
-    if (! (oa)->thread_intra_prefix_lsa) \
-      (oa)->thread_intra_prefix_lsa = \
-        thread_add_event (master, ospf6_intra_prefix_lsa_originate_stub, \
-                          oa, 0); \
-  } while (0)
-#define OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT(oi) \
-  do { \
-    if (! (oi)->thread_intra_prefix_lsa) \
-      (oi)->thread_intra_prefix_lsa = \
-        thread_add_event (master, ospf6_intra_prefix_lsa_originate_transit, \
-                          oi, 0); \
-  } while (0)
-
-#define OSPF6_NETWORK_LSA_EXECUTE(oi) \
-  do { \
-    THREAD_OFF ((oi)->thread_network_lsa); \
-    thread_execute (master, ospf6_network_lsa_originate, oi, 0); \
-  } while (0)
-#define OSPF6_INTRA_PREFIX_LSA_EXECUTE_TRANSIT(oi) \
-  do { \
-    THREAD_OFF ((oi)->thread_intra_prefix_lsa); \
-    thread_execute (master, ospf6_intra_prefix_lsa_originate_transit, oi, 0); \
-  } while (0)
-
 struct ospf6_lsa;
 struct ospf6_area;
+struct ospf6_interface;
 
 /* Function Prototypes */
+extern void ospf6_router_lsa_schedule (struct ospf6_area *oa);
+extern void ospf6_network_lsa_schedule (struct ospf6_interface *oi);
+extern void ospf6_network_lsa_execute (struct ospf6_interface *oi);
+extern void ospf6_link_lsa_schedule (struct ospf6_interface *oi);
+extern void ospf6_intra_prefix_lsa_schedule_stub (struct ospf6_area *oa);
+extern void ospf6_intra_prefix_lsa_schedule_transit (struct ospf6_interface *oi);
+extern void ospf6_intra_prefix_lsa_execute_transit (struct ospf6_interface *oi);
+
 extern char *ospf6_router_lsdesc_lookup (u_char type, u_int32_t interface_id,
                                          u_int32_t neighbor_interface_id,
                                          u_int32_t neighbor_router_id,
@@ -202,11 +167,6 @@ extern char *ospf6_router_lsdesc_lookup (u_char type, u_int32_t interface_id,
 extern char *ospf6_network_lsdesc_lookup (u_int32_t router_id,
                                           struct ospf6_lsa *lsa);
 
-extern int ospf6_router_lsa_originate (struct thread *);
-extern int ospf6_network_lsa_originate (struct thread *);
-extern int ospf6_link_lsa_originate (struct thread *);
-extern int ospf6_intra_prefix_lsa_originate_transit (struct thread *);
-extern int ospf6_intra_prefix_lsa_originate_stub (struct thread *);
 extern void ospf6_intra_prefix_lsa_add (struct ospf6_lsa *lsa);
 extern void ospf6_intra_prefix_lsa_remove (struct ospf6_lsa *lsa);
 extern void ospf6_intra_prefix_lsa_replace (struct ospf6_lsa *old,

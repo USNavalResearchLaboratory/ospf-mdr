@@ -6,14 +6,19 @@ SUBDIRS = lib @ZEBRA@ @BGPD@ @RIPD@ @RIPNGD@ @OSPFD@ @OSPF6D@ @BABELD@ \
 
 DIST_SUBDIRS = lib zebra bgpd ripd ripngd ospfd ospf6d babeld \
 	  isisd watchquagga vtysh ospfclient doc m4 pkgsrc redhat tests \
-	  solaris
+	  solaris debian
 
 EXTRA_DIST = aclocal.m4 SERVICES TODO REPORTING-BUGS INSTALL.quagga.txt \
 	update-autotools \
 	vtysh/Makefile.in vtysh/Makefile.am \
 	tools/mrlg.cgi tools/rrcheck.pl tools/rrlookup.pl tools/zc.pl \
 	tools/zebra.el tools/multiple-bgpd.sh \
-	RELEASE_NOTES.MobileRouting
+	RELEASE_NOTES.MobileRouting quagga.deb.mk
+
+if POST_INSTALL_LDCONFIG
+install-exec-local:
+	if [ -w /etc/ld.so.cache ]; then ldconfig; fi
+endif
 
 if HAVE_LATEX
 

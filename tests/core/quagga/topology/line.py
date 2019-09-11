@@ -20,13 +20,14 @@ from core import pycore
 from core.misc import ipaddr
 
 class Line(Topology):
-    def __init__(self, numnodes, network):
+    def __init__(self, numnodes,
+                 ipv4prefix = '10.0.0.0/30', ipv6prefix = 'a::/126'):
         assert numnodes > 1
         Topology.__init__(self, numnodes)
 
         self.net = []
-        p4 = ipaddr.IPv4Prefix('10.0.0.0/30')
-        p6 = ipaddr.IPv6Prefix('a::/126')
+        p4 = ipaddr.IPv4Prefix(ipv4prefix)
+        p6 = ipaddr.IPv6Prefix(ipv6prefix)
 
         self.net.append(self.session.addobj(cls = pycore.nodes.SwitchNode))
         addrlist = ['%s/%s' % (p4.addr(1), p4.prefixlen),

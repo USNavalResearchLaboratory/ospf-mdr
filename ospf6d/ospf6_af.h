@@ -58,7 +58,8 @@ extern int ospf6_af_validate_ipv4_unicast (struct in6_addr *addr);
 extern int ospf6_af_validate_ipv4_multicast (struct in6_addr *addr);
 extern int ospf6_af_validate_prefix (struct ospf6 *o,
 				     struct in6_addr *prefix,
-				     unsigned int prefixlen);
+				     unsigned int prefixlen,
+                                     bool allow_default);
 
 extern const char *ospf6_prefix2str (struct ospf6 *o, struct prefix *prefix,
 				     char *buf, size_t bufsize);

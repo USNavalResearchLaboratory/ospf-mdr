@@ -1,0 +1,10 @@
+AUTHORS
+NEWS
+README
+REPORTING-BUGS
+RELEASE_NOTES.MobileRouting
+doc/quagga.pdf
+doc/BGP-TypeCode
+doc/draft-zebra-00.txt
+doc/mpls/
+bgpd/BGP4-MIB.txt

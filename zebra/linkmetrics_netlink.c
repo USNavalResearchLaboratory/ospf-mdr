@@ -19,6 +19,18 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#include "zebra.h"
+
+#if !defined(HAVE_LIBNLGENL)
+int linkmetrics_netlink_init (int mcgroup)
+{
+  return 0;
+}
+
+void linkmetrics_netlink_close (void)
+{
+}
+#else  /* HAVE_LIBNLGENL */
 /*
  * This file contains all the functions needed to communicate with the PPP
  * engine in order to receive Link metrics information. It will also pass
@@ -30,7 +42,6 @@
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
 #include <net/ethernet.h>
-#include "zebra.h"
 #include "thread.h"
 #include "log.h"
 #include "privs.h"
@@ -50,16 +61,6 @@ lmsock_t lmgenl_sock = {
   .lmgenl_mcgroup = -1,
   .lmread_thread = NULL,
 };
-
-/* XXX This must match whatever is assigned when LMGENL_MCGROUP_NAME
-   is registered with the generic netlink core.  It's hardcoded for
-   now because libnl doesn't currently have a simple function to
-   resolve multicast groups.
-
-   This can be configured at runtime using the "netlink
-   linkmetrics-multicast-group" vty command.
-*/
-int lmgenl_mcgroup_id = DEFAULT_LMGENL_MCGROUP_ID;
 
 /* policy used to parse generic netlink link metrics/status message
    attributes */
@@ -83,12 +84,14 @@ static struct nla_policy lmgenl_policy[LMGENL_ATTR_MAX + 1] = {
 };
 
 /* Local Function prototypes */
-static int lmgenl_open (lmsock_t *lmsock);
-static int lmgenl_open_recv (lmsock_t *lmsock);
+static int lmgenl_open (lmsock_t *lmsock, const char *genlfamily,
+                        const char *genlgroup);
+static int lmgenl_open_recv (lmsock_t *lmsock, const char *genlfamily,
+                             const char *genlgroup);
 static void lmgenl_close (lmsock_t *lmsock);
 static int lmgenl_recv_status (struct nlmsghdr *nlh);
 static int lmgenl_recv_padq (struct nlmsghdr *nlh);
-static int lmgenl_recv (struct nl_handle *sk);
+static int lmgenl_recv (struct nl_sock *sk);
 static int lmgenl_read (struct thread *thread);
 static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg);
 
@@ -102,6 +105,8 @@ static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg);
  * Input parameters:
  * ================
  *   lmsock = Pointer to LM socket structure
+ *   genlfamily = generic netlink family name
+ *   genlgroup = generic netlink multicast group name
  *
  * Output Parameters:
  * ==================
@@ -109,26 +114,22 @@ static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg);
  *    Otherwise failure
  */
 static int
-lmgenl_open (lmsock_t *lmsock)
+lmgenl_open (lmsock_t *lmsock, const char *genlfamily, const char *genlgroup)
 {
-  if (lmgenl_mcgroup_id <= 0)
-    {
-      zlog_err ("%s: invalid link metrics netlink multicast group id: %d",
-		__func__, lmgenl_mcgroup_id);
-      return -1;
-    }
+  int err;
 
   /* allocate and connect a new generic netlink socket */
-  lmsock->sk = nl_handle_alloc ();
+  lmsock->sk = nl_socket_alloc ();
   if (lmsock->sk == NULL)
     {
-      zlog_err ("%s: nl_handle_alloc() failed: %s", __func__, nl_geterror ());
+      zlog_err ("%s: nl_socket_alloc() failed", __func__);
       return -1;
     }
 
-  if (genl_connect (lmsock->sk))
+  err = genl_connect (lmsock->sk);
+  if (err)
     {
-      zlog_err ("%s: genl_connect() failed: %s", __func__, nl_geterror ());
+      zlog_err ("%s: genl_connect() failed: %s", __func__, nl_geterror (err));
       lmgenl_close (lmsock);
       return -1;
     }
@@ -136,10 +137,24 @@ lmgenl_open (lmsock_t *lmsock)
   /* resolve family name to family id (dynamically allocated by the
    * generic netlink module)
    */
-  lmsock->lmgenl_family = genl_ctrl_resolve (lmsock->sk, LMGENL_FAMILY_NAME);
+  lmsock->lmgenl_family = genl_ctrl_resolve (lmsock->sk, genlfamily);
   if (lmsock->lmgenl_family < 0)
     {
-      zlog_err ("%s: genl_ctrl_resolve() failed: %s", __func__, nl_geterror ());
+      zlog_err ("%s: genl_ctrl_resolve() failed: %s",
+                __func__, nl_geterror (lmsock->lmgenl_family));
+      lmgenl_close (lmsock);
+      return -1;
+    }
+
+  /* resolve group name to group id (dynamically allocated by the
+   * generic netlink module)
+   */
+  lmsock->lmgenl_mcgroup =
+    genl_ctrl_resolve_grp (lmsock->sk, genlfamily, genlgroup);
+  if (lmsock->lmgenl_mcgroup < 0)
+    {
+      zlog_err ("%s: genl_ctrl_resolve_grp() failed: %s",
+                __func__, nl_geterror (lmsock->lmgenl_mcgroup));
       lmgenl_close (lmsock);
       return -1;
     }
@@ -158,6 +173,8 @@ lmgenl_open (lmsock_t *lmsock)
  * Input parameters:
  * ================
  *   lmsock = Pointer to LM socket structure
+ *   genlfamily = generic netlink family name
+ *   genlgroup = generic netlink multicast group name
  *
  * Output Parameters:
  * ==================
@@ -165,45 +182,31 @@ lmgenl_open (lmsock_t *lmsock)
  *    Otherwise failure
  */
 static int
-lmgenl_open_recv (lmsock_t *lmsock)
+lmgenl_open_recv (lmsock_t *lmsock, const char *genlfamily,
+                  const char *genlgroup)
 {
   int err;
 
-  err = lmgenl_open (lmsock);
+  err = lmgenl_open (lmsock, genlfamily, genlgroup);
   if (err)
     return err;
-
-#if 0
-  /* XXX libnl should provide a resolve function for multicast groups */
-  lmsock->lmgenl_mcgroup = nl_get_multicast_id (lmsock->sk, LMGENL_FAMILY_NAME,
-						LMGENL_MCGROUP_NAME);
-  if (lmsock->lmgenl_mcgroup < 0)
-    {
-      zlog_err ("%s: nl_get_multicast_id() failed: %s",
-		__func__, nl_geterror ());
-      lmgenl_close (lmsock);
-      return lmsock->lmgenl_mcgroup;
-    }
-#else
-  lmsock->lmgenl_mcgroup = lmgenl_mcgroup_id;
-#endif
 
   err = nl_socket_add_membership (lmsock->sk, lmsock->lmgenl_mcgroup);
   if (err)
     {
       zlog_err ("%s: nl_socket_add_membership() failed: %s",
-		__func__, nl_geterror ());
+		__func__, nl_geterror (err));
       lmgenl_close (lmsock);
       return err;
     }
 
-  nl_disable_sequence_check (lmsock->sk);
+  nl_socket_disable_seq_check (lmsock->sk);
 
   err = nl_socket_set_nonblocking (lmsock->sk);
   if (err)
     {
       zlog_err ("%s: nl_socket_set_nonblocking() failed: %s",
-		__func__, nl_geterror ());
+		__func__, nl_geterror (err));
       lmgenl_close (lmsock);
       return err;
     }
@@ -232,7 +235,7 @@ lmgenl_close (lmsock_t *lmsock)
   if (lmsock->sk)
     {
       nl_close (lmsock->sk);
-      nl_handle_destroy (lmsock->sk);
+      nl_socket_free (lmsock->sk);
       lmsock->sk = NULL;
     }
 
@@ -285,8 +288,10 @@ static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg)
 
   len = nl_send_auto_complete (lmsock->sk, nlmsg);
   if (len < 0)
-    zlog_err ("%s: nl_send_auto_complete() failed: %s",
-	      __func__, nl_geterror ());
+    {
+      zlog_err ("%s: nl_send_auto_complete() failed: %s",
+                __func__, nl_geterror (len));
+    }
 
   nlmsg_free (nlmsg);
 
@@ -320,28 +325,64 @@ lmgenl_recv_padq (struct nlmsghdr *nlh)
 {
   struct nlattr *attrs[LMGENL_ATTR_MAX + 1];
   zebra_linkmetrics_t linkmetrics;
+  int err;
 
-  if (genlmsg_parse (nlh, 0, attrs, LMGENL_ATTR_MAX, lmgenl_policy))
+  err = genlmsg_parse (nlh, 0, attrs, LMGENL_ATTR_MAX, lmgenl_policy);
+  if (err)
     {
-      zlog_err ("%s: genlmsg_parse() failed: %s", __func__, nl_geterror ());
+      zlog_err ("%s: genlmsg_parse() failed: %s", __func__, nl_geterror (err));
       return -1;
     }
 
   memset (&linkmetrics, 0, sizeof (linkmetrics));
 
   IFREQATTR (LMGENL_ATTR_IFINDEX)
-    linkmetrics.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
+    {
+      linkmetrics.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
+      if (linkmetrics.ifindex < 1)
+	{
+	  zlog_err ("%s: invalid ifindex: %u", __func__, linkmetrics.ifindex);
+	  return -1;
+	}
+    }
 
   IFREQATTR (LMGENL_ATTR_REMOTEV6LLADDR)
-    nla_memcpy (&linkmetrics.linklocal_addr, attrs[LMGENL_ATTR_REMOTEV6LLADDR],
-		sizeof (linkmetrics.linklocal_addr));
+    {
+      nla_memcpy (&linkmetrics.linklocal_addr,
+		  attrs[LMGENL_ATTR_REMOTEV6LLADDR],
+		  sizeof (linkmetrics.linklocal_addr));
+      if (!IN6_IS_ADDR_LINKLOCAL (&linkmetrics.linklocal_addr))
+	{
+	  char buf[INET6_ADDRSTRLEN];
+
+	  inet_ntop (AF_INET6, &linkmetrics.linklocal_addr, buf, sizeof (buf));
+	  zlog_err ("%s: invalid link-local address: %s", __func__, buf);
+	  return -1;
+	}
+    }
 
   IFREQATTR (LMGENL_ATTR_PADQ_RLQ)
-    linkmetrics.metrics.rlq = nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RLQ]);
+    {
+      linkmetrics.metrics.rlq = nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RLQ]);
+      if (linkmetrics.metrics.rlq > 100)
+	{
+	  zlog_err ("%s: invalid relative link quality: %u",
+		    __func__, linkmetrics.metrics.rlq);
+	  return -1;
+	}
+    }
 
   IFREQATTR (LMGENL_ATTR_PADQ_RESOURCE)
-    linkmetrics.metrics.resource =
-      nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RESOURCE]);
+    {
+      linkmetrics.metrics.resource =
+	nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RESOURCE]);
+      if (linkmetrics.metrics.resource > 100)
+	{
+	  zlog_err ("%s: invalid resources: %u",
+		    __func__, linkmetrics.metrics.resource);
+	  return -1;
+	}
+    }
 
   IFREQATTR (LMGENL_ATTR_PADQ_LATENCY)
     linkmetrics.metrics.latency =
@@ -354,6 +395,14 @@ lmgenl_recv_padq (struct nlmsghdr *nlh)
   IFREQATTR (LMGENL_ATTR_PADQ_MDR)
     linkmetrics.metrics.max_datarate =
       nla_get_u16 (attrs[LMGENL_ATTR_PADQ_MDR]);
+
+  if (linkmetrics.metrics.current_datarate > linkmetrics.metrics.max_datarate)
+    {
+      zlog_err ("%s: invalid current/maximum datarate: %u/%u", __func__,
+		linkmetrics.metrics.current_datarate,
+		linkmetrics.metrics.max_datarate);
+      return -1;
+    }
 
   if (IS_ZEBRA_DEBUG_KERNEL)
     zebra_linkmetrics_logdebug (&linkmetrics);
@@ -385,21 +434,41 @@ lmgenl_recv_status (struct nlmsghdr *nlh)
 {
   struct nlattr *attrs[LMGENL_ATTR_MAX + 1];
   zebra_linkstatus_t linkstatus;
+  int err;
 
-  if (genlmsg_parse (nlh, 0, attrs, LMGENL_ATTR_MAX, lmgenl_policy))
+  err = genlmsg_parse (nlh, 0, attrs, LMGENL_ATTR_MAX, lmgenl_policy);
+  if (err)
     {
-      zlog_err ("%s: genlmsg_parse() failed: %s", __func__, nl_geterror ());
+      zlog_err ("%s: genlmsg_parse() failed: %s", __func__, nl_geterror (err));
       return -1;
     }
 
   memset (&linkstatus, 0, sizeof (linkstatus));
 
   IFREQATTR (LMGENL_ATTR_IFINDEX)
-    linkstatus.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
+    {
+      linkstatus.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
+      if (linkstatus.ifindex < 1)
+	{
+	  zlog_err ("%s: invalid ifindex: %u", __func__, linkstatus.ifindex);
+	  return -1;
+	}
+    }
 
   IFREQATTR (LMGENL_ATTR_REMOTEV6LLADDR)
-    nla_memcpy (&linkstatus.linklocal_addr, attrs[LMGENL_ATTR_REMOTEV6LLADDR],
-		sizeof (linkstatus.linklocal_addr));
+    {
+      nla_memcpy (&linkstatus.linklocal_addr,
+		  attrs[LMGENL_ATTR_REMOTEV6LLADDR],
+		  sizeof (linkstatus.linklocal_addr));
+      if (!IN6_IS_ADDR_LINKLOCAL (&linkstatus.linklocal_addr))
+	{
+	  char buf[INET6_ADDRSTRLEN];
+
+	  inet_ntop (AF_INET6, &linkstatus.linklocal_addr, buf, sizeof (buf));
+	  zlog_err ("%s: invalid link-local address: %s", __func__, buf);
+	  return -1;
+	}
+    }
 
   IFREQATTR (LMGENL_ATTR_STS_STATUS)
     linkstatus.status = nla_get_u8 (attrs[LMGENL_ATTR_STS_STATUS]);
@@ -432,7 +501,7 @@ lmgenl_recv_status (struct nlmsghdr *nlh)
  *    Otherwise failure
  */
 static int
-lmgenl_recv (struct nl_handle *sk)
+lmgenl_recv (struct nl_sock *sk)
 {
   int len;
   struct sockaddr_nl peer;
@@ -444,7 +513,7 @@ lmgenl_recv (struct nl_handle *sk)
   if (len <= 0)
     {
       if (len)
-	zlog_err ("%s: nl_recv() failed: %s", __func__, nl_geterror ());
+	zlog_err ("%s: nl_recv() failed: %s", __func__, nl_geterror (len));
       return -1;
     }
 
@@ -562,7 +631,8 @@ int lmgenl_write (lmm_rqst_msg_t *msg)
  *
  * Input parameters:
  * ================
- *   NONE
+ *   genlfamily = generic netlink family name
+ *   genlgroup = generic netlink multicast group name
  *
  * Output Parameters:
  * ==================
@@ -570,9 +640,9 @@ int lmgenl_write (lmm_rqst_msg_t *msg)
  *    0, Success
  */
 int
-linkmetrics_netlink_init (void)
+linkmetrics_netlink_init (const char *genlfamily, const char *genlgroup)
 {
-  if (lmgenl_open_recv (&lmgenl_sock))
+  if (lmgenl_open_recv (&lmgenl_sock, genlfamily, genlgroup))
     {
       zlog_err ("%s: lmgenl_open_recv() failed", __func__);
       return -1;
@@ -614,3 +684,4 @@ linkmetrics_netlink_close (void)
 
   return;
 }
+#endif  /* HAVE_LIBNLGENL */

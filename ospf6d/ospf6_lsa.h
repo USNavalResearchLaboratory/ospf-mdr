@@ -128,8 +128,6 @@ struct ospf6_lsa
 
   struct thread    *expire;
   struct thread    *refresh;        /* For self-originated LSA */
-  struct thread    *delay;          /* For delaying origination according
-				       to MinLSInterval */
 
   int               retrans_count;
 

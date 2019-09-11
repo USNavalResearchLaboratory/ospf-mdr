@@ -43,8 +43,6 @@ ospf6_af_range (struct ospf6 *o)
 {
   u_int8_t instance_id;
 
-  assert (o != NULL);
-
   instance_id = o->instance_id;
 
   if (instance_id < 32)
@@ -55,9 +53,9 @@ ospf6_af_range (struct ospf6 *o)
     return OSPF6_AF_IPV4_UNICAST;
   else if (instance_id < 128)
     return OSPF6_AF_IPV4_MULTICAST;
-  else
-    zlog_warn ("%s: Error: OSPF Instance-ID %u is reserved",
-	       __func__, instance_id);
+
+  zlog_warn ("%s: Error: OSPF Instance-ID %u is reserved",
+             __func__, instance_id);
 
   return OSPF6_AF_UNASSIGNED;
 }
@@ -65,45 +63,49 @@ ospf6_af_range (struct ospf6 *o)
 bool
 ospf6_af_is_ipv6_unicast (struct ospf6 *o)
 {
-  return (ospf6_af_range (o) == OSPF6_AF_IPV6_UNICAST);
+  u_int8_t instance_id = o->instance_id;
+
+  return (instance_id < 32);
 }
 
 bool
 ospf6_af_is_ipv6_multicast (struct ospf6 *o)
 {
-  return (ospf6_af_range (o) == OSPF6_AF_IPV6_MULTICAST);
+  u_int8_t instance_id = o->instance_id;
+
+  return (32 <= instance_id && instance_id < 64);
 }
 
 bool
 ospf6_af_is_ipv4_unicast (struct ospf6 *o)
 {
-  return (ospf6_af_range (o) == OSPF6_AF_IPV4_UNICAST);
+  u_int8_t instance_id = o->instance_id;
+
+  return (64 <= instance_id && instance_id < 96);
 }
 
 bool
 ospf6_af_is_ipv4_multicast (struct ospf6 *o)
 {
-  return (ospf6_af_range (o) == OSPF6_AF_IPV4_MULTICAST);
+  u_int8_t instance_id = o->instance_id;
+
+  return (96 <= instance_id && instance_id < 128);
 }
 
 bool
 ospf6_af_is_ipv6 (struct ospf6 *o)
 {
-  int range;
+  u_int8_t instance_id = o->instance_id;
 
-  range = ospf6_af_range (o);
-
-  return (range == OSPF6_AF_IPV6_UNICAST || range == OSPF6_AF_IPV6_MULTICAST);
+  return (instance_id < 64);
 }
 
 bool
 ospf6_af_is_ipv4 (struct ospf6 *o)
 {
-  int range;
+  u_int8_t instance_id = o->instance_id;
 
-  range = ospf6_af_range (o);
-
-  return (range == OSPF6_AF_IPV4_UNICAST || range == OSPF6_AF_IPV4_MULTICAST);
+  return (64 <= instance_id && instance_id < 128);
 }
 
 /* convert an IPv6 address to IPv4 */
@@ -354,9 +356,12 @@ ospf6_af_validate_ipv4_multicast (struct in6_addr *addr)
 
 int
 ospf6_af_validate_prefix (struct ospf6 *o, struct in6_addr *prefix,
-			  unsigned int prefixlen)
+			  unsigned int prefixlen, bool allow_default)
 {
   int af_range, err;
+
+  if (allow_default && prefixlen == 0 && IN6_IS_ADDR_UNSPECIFIED (prefix))
+    return 0;
 
   af_range = ospf6_af_range (o);
 

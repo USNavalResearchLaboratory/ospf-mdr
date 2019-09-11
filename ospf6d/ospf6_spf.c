@@ -278,6 +278,9 @@ ospf6_lsdesc_backlink (struct ospf6_lsa *lsa,
             continue;
           found = backlink;
         }
+
+      if (found != NULL)
+        break;
     }
 
   if (IS_OSPF6_DEBUG_SPF (PROCESS))
@@ -292,14 +295,24 @@ ospf6_set_nexthop(struct ospf6_nexthop *nexthop, unsigned int ifindex,
 {
   if (IS_OSPF6_DEBUG_SPF (PROCESS))
     {
-      char buf[64];
+      if (linklocal_addr)
+        {
+          char buf[64];
 
-      ospf6_addr2str6 (linklocal_addr, buf, sizeof (buf));
-      zlog_debug ("  nexthop %s from %s", buf, from_name);
+          ospf6_addr2str (ospf6, linklocal_addr, buf, sizeof (buf));
+          zlog_debug ("  nexthop %s%%%s(%u) from %s", buf,
+                      ifindex2ifname (ifindex), ifindex, from_name);
+        }
+      else
+        {
+          zlog_debug ("  nexthop %s(%u) from %s",
+                      ifindex2ifname (ifindex), ifindex, from_name);
+        }
     }
 
-  nexthop->address = *linklocal_addr;
   nexthop->ifindex = ifindex;
+  if (linklocal_addr)
+    nexthop->address = *linklocal_addr;
 }
 
 static int
@@ -354,6 +367,13 @@ ospf6_nexthop_calc (struct ospf6_vertex *w, struct ospf6_vertex *v,
       link_lsa = (struct ospf6_link_lsa *) OSPF6_LSA_HEADER_END (lsa->header);
       ospf6_set_nexthop(&w->nexthop[i], ifindex,
 			&link_lsa->linklocal_addr, lsa->name);
+      i++;
+    }
+
+  if (i == 0 && oi->type == OSPF6_IFTYPE_POINTOPOINT)
+    {
+      ospf6_set_nexthop(&w->nexthop[i], ifindex,
+                        NULL, "point-to-point interface");
       i++;
     }
 
@@ -422,11 +442,11 @@ ospf6_spf_add_nexthop (struct ospf6_nexthop existing[OSPF6_MULTI_PATH_LIMIT],
 
 static int
 ospf6_spf_install (struct ospf6_vertex *v,
-                   struct ospf6_route_table *result_table)
+                   struct ospf6_route_table *result_table,
+                   bool router_is_root)
 {
   struct ospf6_route *route;
   int i;
-  struct ospf6_vertex *prev;
 
   if (IS_OSPF6_DEBUG_SPF (PROCESS))
     zlog_debug ("SPF install %s hops %d cost %d",
@@ -443,39 +463,45 @@ ospf6_spf_install (struct ospf6_vertex *v,
     }
   else if (route && route->path.cost == v->cost)
     {
+      struct ospf6_vertex *prev;
+
       if (IS_OSPF6_DEBUG_SPF (PROCESS))
         zlog_debug ("  another path found, merge");
 
-      for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
-           i < OSPF6_MULTI_PATH_LIMIT; i++)
-        {
-	  int err;
-
-	  err = ospf6_spf_add_nexthop (route->nexthop, &v->nexthop[i]);
-	  if (err)
-	    break;
-        }
-
       prev = (struct ospf6_vertex *) route->route_option;
       assert (prev->hops <= v->hops);
+
+      if (router_is_root)
+        {
+          for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
+                 i < OSPF6_MULTI_PATH_LIMIT; i++)
+            {
+              int err;
+
+              err = ospf6_spf_add_nexthop (route->nexthop, &v->nexthop[i]);
+              if (err)
+                break;
+            }
+
+          /* copy merged results (all nexthops) back to vertex so future
+           * children have access to complete nexthop information
+           */
+          for (i = 0; i < OSPF6_MULTI_PATH_LIMIT; i++)
+            {
+              struct ospf6_nexthop *nexthop = &route->nexthop[i];
+              struct listnode *node;
+              struct ospf6_vertex *w;
+
+              ospf6_nexthop_copy (&prev->nexthop[i], nexthop);
+
+              /* add nexthop to any existing children */
+              if (ospf6_nexthop_is_set (nexthop))
+                for (ALL_LIST_ELEMENTS_RO (prev->child_list, node, w))
+                  ospf6_spf_add_nexthop (w->nexthop, nexthop);
+            }
+        }
+
       ospf6_vertex_delete (v);
-
-      /* copy merged results (all nexthops) back to vertex so future
-       * children have access to complete nexthop information
-       */
-      for (i = 0; i < OSPF6_MULTI_PATH_LIMIT; i++)
-	{
-	  struct ospf6_nexthop *nexthop = &route->nexthop[i];
-	  struct listnode *node;
-	  struct ospf6_vertex *w;
-
-	  ospf6_nexthop_copy (&prev->nexthop[i], nexthop);
-
-	  /* add nexthop to any existing children */
-	  if (ospf6_nexthop_is_set (nexthop))
-	    for (ALL_LIST_ELEMENTS_RO (prev->child_list, node, w))
-	      ospf6_spf_add_nexthop (w->nexthop, nexthop);
-	}
 
       return -1;
     }
@@ -504,14 +530,16 @@ ospf6_spf_install (struct ospf6_vertex *v,
   route->path.options[1] = v->options[1];
   route->path.options[2] = v->options[2];
 
-  for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
-       i < OSPF6_MULTI_PATH_LIMIT; i++)
-    ospf6_nexthop_copy (&route->nexthop[i], &v->nexthop[i]);
-
-  if (i == 0)
+  if (router_is_root)
     {
-      /* no nexthop should only happen when v is this router */
-      assert (v->lsa->header->adv_router == ospf6->router_id);
+      for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
+             i < OSPF6_MULTI_PATH_LIMIT; i++)
+        {
+          ospf6_nexthop_copy (&route->nexthop[i], &v->nexthop[i]);
+        }
+
+      /* no nexthop should only happen when v is the root router */
+      assert (i != 0 || v->lsa->header->adv_router == ospf6->router_id);
     }
 
   route->route_option = v;
@@ -547,6 +575,7 @@ ospf6_spf_calculation (u_int32_t router_id,
   int size;
   caddr_t lsdesc;
   struct ospf6_lsa *lsa;
+  bool router_is_root;
   u_char all_root_neighbors_added = 0;
 
   ospf6_spf_table_finish (result_table);
@@ -569,10 +598,12 @@ ospf6_spf_calculation (u_int32_t router_id,
 
   pqueue_enqueue (root, candidate_list);        // add root to candidate list
 
+  router_is_root = (router_id == oa->ospf6->router_id);
+
   // If this router is the root,
   // For each manet interface, add all routable and Full neighbors for which
   // LSA exists to candidate list.
-  if (router_id == oa->ospf6->router_id)
+  if (router_is_root)
     {
       struct listnode *i2;
       struct ospf6_interface *oi;
@@ -608,8 +639,8 @@ ospf6_spf_calculation (u_int32_t router_id,
 	      if (on->mdr.routable || on->state == OSPF6_NEIGHBOR_FULL)
 		{
 		  struct ospf6_lsa *tmplsa;
-		  struct ospf6_link_lsa *link_lsa;
 		  struct in6_addr *linklocal_addr;
+                  char *from;
 
 		  lsa = ospf6_spf_lsdb_lookup (htons (OSPF6_LSTYPE_ROUTER),
 					       htonl (0), on->router_id,
@@ -620,15 +651,25 @@ ospf6_spf_calculation (u_int32_t router_id,
 		  tmplsa = ospf6_lsdb_lookup (htons (OSPF6_LSTYPE_LINK),
 					      htonl (on->ifindex),
 					      on->router_id, oi->lsdb);
-		  link_lsa = tmplsa ? (struct ospf6_link_lsa *)
-		    OSPF6_LSA_HEADER_END (tmplsa->header) : NULL;
-		  if (link_lsa)
-		    linklocal_addr = &link_lsa->linklocal_addr;
+		  if (tmplsa)
+                    {
+                      struct ospf6_link_lsa *link_lsa;
+
+                      link_lsa = (struct ospf6_link_lsa *)
+                        OSPF6_LSA_HEADER_END (tmplsa->header);
+                      linklocal_addr = &link_lsa->linklocal_addr;
+                      from = tmplsa->name;
+                    }
 		  else if (ospf6_af_is_ipv6 (oa->ospf6) &&
 			   IN6_IS_ADDR_LINKLOCAL (&on->linklocal_addr))
-		    linklocal_addr = &on->linklocal_addr;
+                    {
+                      linklocal_addr = &on->linklocal_addr;
+                      from = on->name;
+                    }
 		  else
-		    linklocal_addr = NULL;
+                    {
+                      linklocal_addr = NULL;
+                    }
 
 		  if (linklocal_addr != NULL)
 		    {
@@ -636,8 +677,12 @@ ospf6_spf_calculation (u_int32_t router_id,
 		      v->area = oa;
 		      v->cost = on->cost;
 		      v->hops = 1;
-		      v->nexthop[0].ifindex = oi->interface->ifindex;
-		      v->nexthop[0].address = *linklocal_addr;
+                      ospf6_set_nexthop(&v->nexthop[0], oi->interface->ifindex,
+                                        linklocal_addr, from);
+
+                      if (IS_OSPF6_DEBUG_SPF (PROCESS))
+                        zlog_debug ("  New candidate: %s hops %d cost %d",
+                                    v->name, v->hops, v->cost);
 
 		      pqueue_enqueue (v, candidate_list);
 		    }
@@ -661,7 +706,7 @@ ospf6_spf_calculation (u_int32_t router_id,
       v = pqueue_dequeue (candidate_list);
 
       /* installing may result in merging or rejecting of the vertex */
-      if (ospf6_spf_install (v, result_table) < 0)
+      if (ospf6_spf_install (v, result_table, router_is_root) < 0)
         continue;
 
       // Except for the case of fully connected adjacencies and full LSAs,
@@ -701,22 +746,25 @@ ospf6_spf_calculation (u_int32_t router_id,
 
           /* nexthop calculation */
 	  enqueue = 1;
-          if (w->hops == 0)
-	    {
-	      w->nexthop[0].ifindex = ROUTER_LSDESC_GET_IFID (lsdesc);
-	    }
-          else if (w->hops == 1 && v->hops == 0)
-	    {
-	      int err;
-	      err = ospf6_nexthop_calc (w, v, lsdesc);
-	      if (err)
-		enqueue = 0;
-	    }
-          else
+          if (router_is_root)
             {
-              for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
-                   i < OSPF6_MULTI_PATH_LIMIT; i++)
-                ospf6_nexthop_copy (&w->nexthop[i], &v->nexthop[i]);
+              if (w->hops == 0)
+                {
+                  w->nexthop[0].ifindex = ROUTER_LSDESC_GET_IFID (lsdesc);
+                }
+              else if (w->hops == 1 && v->hops == 0)
+                {
+                  int err;
+                  err = ospf6_nexthop_calc (w, v, lsdesc);
+                  if (err)
+                    enqueue = 0;
+                }
+              else
+                {
+                  for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
+                         i < OSPF6_MULTI_PATH_LIMIT; i++)
+                    ospf6_nexthop_copy (&w->nexthop[i], &v->nexthop[i]);
+                }
             }
 
 	  if (enqueue)

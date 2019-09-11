@@ -50,6 +50,7 @@
 #include "ospf6_af.h"
 #include "ospf6_flood.h"
 
+#define LSA_SCHEDULE_DELAY_MSEC 100
 
 unsigned char conf_debug_ospf6_brouter = 0;
 u_int32_t conf_debug_ospf6_brouter_specific_router_id;
@@ -107,7 +108,7 @@ ospf6_router_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
   return 0;
 }
 
-int
+static int
 ospf6_router_lsa_originate (struct thread *thread)
 {
   struct ospf6_area *oa;
@@ -115,7 +116,7 @@ ospf6_router_lsa_originate (struct thread *thread)
   char buffer [OSPF6_MAX_LSASIZE];
   struct ospf6_lsa_header *lsa_header;
   struct ospf6_lsa *lsa;
-
+  struct ospf6_lsa *old;
   u_int32_t link_state_id = 0;
   struct listnode *node, *nnode;
   struct listnode *j;
@@ -129,6 +130,26 @@ ospf6_router_lsa_originate (struct thread *thread)
 
   oa = (struct ospf6_area *) THREAD_ARG (thread);
   oa->thread_router_lsa = NULL;
+
+  old = ospf6_lsdb_lookup (htons (OSPF6_LSTYPE_ROUTER), htonl (0),
+                           oa->ospf6->router_id, oa->lsdb);
+  if (old != NULL)
+    {
+      long delay_msec;
+
+      delay_msec = 1000 * oa->ospf6->min_lsa_interval -
+        elapsed_msec (&old->originated);
+      if (delay_msec > 0)
+        {
+          if (IS_OSPF6_DEBUG_ORIGINATE (ROUTER))
+            zlog_debug ("Delaying Router-LSA origination for area %s by %li "
+                        "msec to satisfy MinLSInterval", oa->name, delay_msec);
+          oa->thread_router_lsa =
+            thread_add_timer_msec (master, ospf6_router_lsa_originate,
+                                   oa, delay_msec);
+          return 0;
+        }
+    }
 
   if (IS_OSPF6_DEBUG_ORIGINATE (ROUTER))
     zlog_debug ("Originate Router-LSA for Area %s", oa->name);
@@ -331,6 +352,17 @@ ospf6_router_lsa_originate (struct thread *thread)
   return 0;
 }
 
+void
+ospf6_router_lsa_schedule (struct ospf6_area *oa)
+{
+  if (!oa->thread_router_lsa)
+    {
+      oa->thread_router_lsa =
+        thread_add_timer_msec (master, ospf6_router_lsa_originate,
+                               oa, LSA_SCHEDULE_DELAY_MSEC);
+    }
+}
+
 /*******************************/
 /* RFC2740 3.4.3.2 Network-LSA */
 /*******************************/
@@ -361,7 +393,7 @@ ospf6_network_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
   return 0;
 }
 
-int
+static int
 ospf6_network_lsa_originate (struct thread *thread)
 {
   struct ospf6_interface *oi;
@@ -396,6 +428,25 @@ ospf6_network_lsa_originate (struct thread *thread)
       if (old)
         ospf6_lsa_purge (old);
       return 0;
+    }
+
+  if (old != NULL)
+    {
+      long delay_msec;
+
+      delay_msec = 1000 * oi->area->ospf6->min_lsa_interval -
+        elapsed_msec (&old->originated);
+      if (delay_msec > 0)
+        {
+          if (IS_OSPF6_DEBUG_ORIGINATE (NETWORK))
+            zlog_debug ("Delaying Network-LSA origination for interface %s "
+                        "by %li msec to satisfy MinLSInterval",
+                        oi->interface->name, delay_msec);
+          oi->thread_network_lsa =
+            thread_add_timer_msec (master, ospf6_network_lsa_originate,
+                                   oi, delay_msec);
+          return 0;
+        }
     }
 
   if (IS_OSPF6_DEBUG_ORIGINATE (NETWORK))
@@ -476,6 +527,23 @@ ospf6_network_lsa_originate (struct thread *thread)
   return 0;
 }
 
+void
+ospf6_network_lsa_schedule (struct ospf6_interface *oi)
+{
+  if (!oi->thread_network_lsa)
+    {
+      oi->thread_network_lsa =
+        thread_add_timer_msec (master, ospf6_network_lsa_originate,
+                               oi, LSA_SCHEDULE_DELAY_MSEC);
+    }
+}
+
+void
+ospf6_network_lsa_execute (struct ospf6_interface *oi)
+{
+  THREAD_OFF (oi->thread_network_lsa);
+  thread_execute (master, ospf6_network_lsa_originate, oi, 0);
+}
 
 /****************************/
 /* RFC2740 3.4.3.6 Link-LSA */
@@ -532,7 +600,7 @@ ospf6_link_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
   return 0;
 }
 
-int
+static int
 ospf6_link_lsa_originate (struct thread *thread)
 {
   struct ospf6_interface *oi;
@@ -594,11 +662,33 @@ ospf6_link_lsa_originate (struct thread *thread)
    * purposes, see Section 2.5 of RFC 5838)
    */
   if (CHECK_FLAG (oi->flag, OSPF6_INTERFACE_DISABLE) ||
+      CHECK_FLAG (oi->flag, OSPF6_INTERFACE_PASSIVE) ||
+      oi->type == OSPF6_IFTYPE_LOOPBACK ||
+      oi->type == OSPF6_IFTYPE_VIRTUALLINK ||
       (suppress && !af_is_ipv4))
     {
       if (old)
         ospf6_lsa_purge (old);
       return 0;
+    }
+
+  if (old != NULL)
+    {
+      long delay_msec;
+
+      delay_msec = 1000 * oi->area->ospf6->min_lsa_interval -
+        elapsed_msec (&old->originated);
+      if (delay_msec > 0)
+        {
+          if (IS_OSPF6_DEBUG_ORIGINATE (LINK))
+            zlog_debug ("Delaying Link-LSA origination for interface %s "
+                        "by %li msec to satisfy MinLSInterval",
+                        oi->interface->name, delay_msec);
+          oi->thread_link_lsa =
+            thread_add_timer_msec (master, ospf6_link_lsa_originate,
+                                   oi, delay_msec);
+          return 0;
+        }
     }
 
   if (IS_OSPF6_DEBUG_ORIGINATE (LINK))
@@ -633,20 +723,33 @@ ospf6_link_lsa_originate (struct thread *thread)
   if (!suppress)
     {
       struct ospf6_route *route;
-
-      link_lsa->prefix_num = htonl (oi->route_connected->count);
+      unsigned int num_prefixes = 0;
 
       /* connected prefix to advertise */
       for (route = ospf6_route_head (oi->route_connected); route;
 	   route = ospf6_route_next (route))
 	{
+          if ((char *) op + sizeof (*op) +
+              OSPF6_PREFIX_SPACE (route->prefix.prefixlen) >
+              buffer + sizeof (buffer))
+            {
+              zlog_warn ("Only including %u of %u prefixes in Link-LSA "
+                         "for interface %s", num_prefixes,
+                         oi->route_connected->count, oi->interface->name);
+              break;
+            }
+
 	  op->prefix_length = route->prefix.prefixlen;
 	  op->prefix_options = route->path.prefix_options;
 	  op->prefix_metric = htons (0);
 	  memcpy (OSPF6_PREFIX_BODY (op), &route->prefix.u.prefix6,
 		  OSPF6_PREFIX_SPACE (op->prefix_length));
+          num_prefixes++;
 	  op = OSPF6_PREFIX_NEXT (op);
+          assert ((char *) op <= buffer + sizeof (buffer));
 	}
+
+      link_lsa->prefix_num = htonl (num_prefixes);
     }
 
   /* Fill LSA Header */
@@ -671,6 +774,16 @@ ospf6_link_lsa_originate (struct thread *thread)
   return 0;
 }
 
+void
+ospf6_link_lsa_schedule (struct ospf6_interface *oi)
+{
+  if (!oi->thread_link_lsa)
+    {
+      oi->thread_link_lsa =
+        thread_add_timer_msec (master, ospf6_link_lsa_originate,
+                               oi, LSA_SCHEDULE_DELAY_MSEC);
+    }
+}
 
 /*****************************************/
 /* RFC2740 3.4.3.7 Intra-Area-Prefix-LSA */
@@ -730,7 +843,7 @@ ospf6_intra_prefix_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
   return 0;
 }
 
-int
+static int
 ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
 {
   struct ospf6_area *oa;
@@ -747,7 +860,6 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
   struct listnode *i, *j;
   int full_count = 0;
   unsigned short prefix_num = 0;
-  char buf[BUFSIZ];
 
   oa = (struct ospf6_area *) THREAD_ARG (thread);
   oa->thread_intra_prefix_lsa = NULL;
@@ -761,6 +873,26 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
       if (old)
         ospf6_lsa_purge (old);
       return 0;
+    }
+
+  if (old != NULL)
+    {
+      long delay_msec;
+
+      delay_msec = 1000 * oa->ospf6->min_lsa_interval -
+        elapsed_msec (&old->originated);
+      if (delay_msec > 0)
+        {
+          if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
+            zlog_debug ("Delaying Intra-Area-Prefix-LSA (stub) origination "
+                        "for area %s by %li msec to satisfy MinLSInterval",
+                        oa->name, delay_msec);
+          oa->thread_intra_prefix_lsa =
+            thread_add_timer_msec (master,
+                                   ospf6_intra_prefix_lsa_originate_stub,
+                                   oa, delay_msec);
+          return 0;
+        }
     }
 
   if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
@@ -814,23 +946,41 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
       for (route = ospf6_route_head (oi->route_connected); route;
            route = ospf6_route_best_next (route))
         {
-          if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
-            {
-              ospf6_prefix2str (oa->ospf6, &route->prefix,
-				buf, sizeof (buf));
-              zlog_debug ("    include %s", buf);
-            }
+          u_int8_t prefix_length;
+
 	  //RFC 2740 3.4.3.7 Bullet 5 --
           if (oi->type == OSPF6_IFTYPE_MDR ||
               oi->type == OSPF6_IFTYPE_POINTOMULTIPOINT)
 	    {
 	      if (ospf6_af_is_ipv4 (oa->ospf6) && oa->ospf6->af_interop)
-		op->prefix_length = 32;
+		prefix_length = 32;
 	      else
-		op->prefix_length = 128;
+		prefix_length = 128;
 	    }
           else
-	    op->prefix_length = route->prefix.prefixlen;
+            {
+              prefix_length = route->prefix.prefixlen;
+            }
+
+          if ((char *) op + sizeof (*op) +
+              OSPF6_PREFIX_SPACE (prefix_length) > buffer + sizeof (buffer))
+            {
+              zlog_warn ("Only including %u of %u prefixes in "
+                         "Intra-Area-Prefix-LSA for stub interface %s",
+                         prefix_num, oi->route_connected->count,
+                         oi->interface->name);
+              break;
+            }
+
+          if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
+            {
+              char buf[PREFIXSTRLEN];
+
+              ospf6_prefix2str (oa->ospf6, &route->prefix, buf, sizeof (buf));
+              zlog_debug ("    include %s", buf);
+            }
+
+          op->prefix_length = prefix_length;
 	  op->prefix_options = route->path.prefix_options;
           op->prefix_options |= OSPF6_PREFIX_OPTION_LA;
 	  op->prefix_metric = htons (route->path.cost);
@@ -841,6 +991,7 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
           ospf6_prefix_apply_mask (op);
 	  op = OSPF6_PREFIX_NEXT (op);
 	  prefix_num++;
+          assert ((char *) op <= buffer + sizeof (buffer));
 	}
     }
 
@@ -878,8 +1029,19 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
   return 0;
 }
 
+void
+ospf6_intra_prefix_lsa_schedule_stub (struct ospf6_area *oa)
+{
+  if (!oa->thread_intra_prefix_lsa)
+    {
+      oa->thread_intra_prefix_lsa =
+        thread_add_timer_msec (master,
+                               ospf6_intra_prefix_lsa_originate_stub,
+                               oa, LSA_SCHEDULE_DELAY_MSEC);
+    }
+}
 
-int
+static int
 ospf6_intra_prefix_lsa_originate_transit (struct thread *thread)
 {
   struct ospf6_interface *oi;
@@ -899,7 +1061,6 @@ ospf6_intra_prefix_lsa_originate_transit (struct thread *thread)
   struct ospf6_link_lsa *link_lsa;
   char *start, *end, *current;
   u_int16_t type;
-  char buf[BUFSIZ];
 
   oi = (struct ospf6_interface *) THREAD_ARG (thread);
   oi->thread_intra_prefix_lsa = NULL;
@@ -916,6 +1077,26 @@ ospf6_intra_prefix_lsa_originate_transit (struct thread *thread)
       if (old)
         ospf6_lsa_purge (old);
       return 0;
+    }
+
+  if (old != NULL)
+    {
+      long delay_msec;
+
+      delay_msec = 1000 * oi->area->ospf6->min_lsa_interval -
+        elapsed_msec (&old->originated);
+      if (delay_msec > 0)
+        {
+          if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
+            zlog_debug ("Delaying Intra-Area-Prefix-LSA origination for "
+                        "interface %s by %li msec to satisfy MinLSInterval",
+                        oi->interface->name, delay_msec);
+          oi->thread_intra_prefix_lsa =
+            thread_add_timer_msec (master,
+                                   ospf6_intra_prefix_lsa_originate_transit,
+                                   oi, delay_msec);
+          return 0;
+        }
     }
 
   if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
@@ -1019,6 +1200,8 @@ ospf6_intra_prefix_lsa_originate_transit (struct thread *thread)
 
           if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
             {
+              char buf[PREFIXSTRLEN];
+
               ospf6_prefix2str (oi->area->ospf6, &route->prefix,
 				buf, sizeof (buf));
               zlog_debug ("    include %s", buf);
@@ -1038,6 +1221,16 @@ ospf6_intra_prefix_lsa_originate_transit (struct thread *thread)
   for (route = ospf6_route_head (route_advertise); route;
        route = ospf6_route_best_next (route))
     {
+      if ((char *) op + sizeof (*op) +
+          OSPF6_PREFIX_SPACE (route->prefix.prefixlen) >
+          buffer + sizeof (buffer))
+        {
+          zlog_warn ("Only including %u of %u prefixes in "
+                     "Intra-Area-Prefix-LSA for interface %s", prefix_num,
+                     route_advertise->count, oi->interface->name);
+          break;
+        }
+
       op->prefix_length = route->prefix.prefixlen;
       op->prefix_options = route->path.prefix_options;
       op->prefix_metric = htons (0);
@@ -1045,6 +1238,7 @@ ospf6_intra_prefix_lsa_originate_transit (struct thread *thread)
               OSPF6_PREFIX_SPACE (op->prefix_length));
       op = OSPF6_PREFIX_NEXT (op);
       prefix_num++;
+      assert ((char *) op <= buffer + sizeof (buffer));
     }
 
   ospf6_route_table_delete (route_advertise);
@@ -1078,6 +1272,25 @@ ospf6_intra_prefix_lsa_originate_transit (struct thread *thread)
   ospf6_lsa_originate_area (lsa, oi->area);
 
   return 0;
+}
+
+void
+ospf6_intra_prefix_lsa_schedule_transit (struct ospf6_interface *oi)
+{
+  if (!oi->thread_intra_prefix_lsa)
+    {
+      oi->thread_intra_prefix_lsa =
+        thread_add_timer_msec (master,
+                               ospf6_intra_prefix_lsa_originate_transit,
+                               oi,  LSA_SCHEDULE_DELAY_MSEC);
+    }
+}
+
+void
+ospf6_intra_prefix_lsa_execute_transit (struct ospf6_interface *oi)
+{
+  THREAD_OFF (oi->thread_intra_prefix_lsa);
+  thread_execute (master, ospf6_intra_prefix_lsa_originate_transit, oi, 0);
 }
 
 static unsigned int
@@ -1150,7 +1363,7 @@ __ospf6_intra_prefix_lsa_add (struct ospf6_lsa *lsa)
 
       /* check prefix address family */
       if (ospf6_af_validate_prefix (oa->ospf6,
-				    &prefix.u.prefix6, prefix.prefixlen))
+				    &prefix.u.prefix6, prefix.prefixlen, false))
 	{
 	  char buf[PREFIXSTRLEN];
 
@@ -1205,57 +1418,12 @@ __ospf6_intra_prefix_lsa_add (struct ospf6_lsa *lsa)
 	{
 	  ospf6_nexthop_copy (&route->nexthop[i], &ls_entry->nexthop[i]);
 
-	  if (lsa->header->adv_router == oa->ospf6->router_id)
-	    {
-	      //This is the router's own lsa
-	      route->nexthop[i].directly_connected = true;
-	    }
-	  else if (ls_entry->nexthop[i].ifindex &&
-		   (IN6_IS_ADDR_UNSPECIFIED (&ls_entry->nexthop[i].address)
-		    || IN6_IS_ADDR_LINKLOCAL (&ls_entry->nexthop[i].address)))
-	    {
-	      //See ospf6_nexthop_calc() for settting nexthop->ifindex
-	      //this check assumes that ifindex is being set for directly
-	      //connected nexthops
-	      route->nexthop[i].directly_connected = true;
-	    }
-	  else
-	    {
-	      struct prefix nexthop = {
-		.family = route->prefix.family,
-		.u = {
-		  .prefix6 = route->nexthop[i].address,
-		},
-	      };
-
-	      if (ospf6_af_is_ipv4 (oa->ospf6) && oa->ospf6->af_interop)
-		nexthop.prefixlen = 32;
-	      else
-		nexthop.prefixlen = 128;
-
-	      if (prefix_match (&route->prefix, &nexthop))
-		{
-		  //This is a one-hop neighbor - cost_e2 is hopcount
-		  route->nexthop[i].directly_connected = true;
-		}
-	      else
-		{
-		  route->nexthop[i].directly_connected = false;
-		}
-	    }
-
 	  if (IS_OSPF6_DEBUG_EXAMIN (INTRA_PREFIX))
 	    {
 	      char nexthop[INET6_ADDRSTRLEN];
-	      const char *directly_connected;
-
 	      ospf6_addr2str (oa->ospf6, &route->nexthop[i].address,
 			      nexthop, sizeof (nexthop));
-	      if (route->nexthop[i].directly_connected)
-		directly_connected = " (directly connected)";
-	      else
-		directly_connected = "";
-	      zlog_debug ("  nexthop %s%s", nexthop, directly_connected);
+	      zlog_debug ("  nexthop %s", nexthop);
 	    }
 	}
 
@@ -1289,7 +1457,6 @@ __ospf6_intra_prefix_lsa_remove (struct ospf6_lsa *lsa,
 {
   struct ospf6_area *oa;
   struct ospf6_intra_prefix_lsa *intra_prefix_lsa;
-  struct prefix prefix;
   struct ospf6_route *route;
   int prefix_num;
   struct ospf6_prefix *op;
@@ -1310,6 +1477,10 @@ __ospf6_intra_prefix_lsa_remove (struct ospf6_lsa *lsa,
   end = OSPF6_LSA_END (lsa->header);
   for (current = start; current < end; current += OSPF6_PREFIX_SIZE (op))
     {
+      struct prefix prefix = {
+	.family = AF_INET6,
+      };
+
       op = (struct ospf6_prefix *) current;
       if (prefix_num == 0)
         break;
@@ -1317,14 +1488,12 @@ __ospf6_intra_prefix_lsa_remove (struct ospf6_lsa *lsa,
         break;
       prefix_num--;
 
-      memset (&prefix, 0, sizeof (struct prefix));
-      prefix.family = AF_INET6;
-      prefix.prefixlen = op->prefix_length;
       ospf6_prefix_in6_addr (&prefix.u.prefix6, op);
+      prefix.prefixlen = op->prefix_length;
 
       /* check prefix address family */
       if (ospf6_af_validate_prefix (oa->ospf6,
-				    &prefix.u.prefix6, prefix.prefixlen))
+				    &prefix.u.prefix6, prefix.prefixlen, false))
 	{
 	  char buf[PREFIXSTRLEN];
 
@@ -1332,6 +1501,22 @@ __ospf6_intra_prefix_lsa_remove (struct ospf6_lsa *lsa,
 	  zlog_warn ("%s: ignoring prefix %s in lsa %s: "
 		     "address family incompatibility", __func__,
 		     buf, lsa->name);
+
+	  /* ignore this prefix */
+	  continue;
+	}
+
+      /* check if this prefix is connected */
+      if (ospf6_area_prefix_is_connected (oa, &prefix))
+	{
+	  if (IS_OSPF6_DEBUG_EXAMIN (INTRA_PREFIX))
+	    {
+	      char buf[PREFIXSTRLEN];
+
+	      ospf6_prefix2str (oa->ospf6, &prefix, buf, sizeof (buf));
+	      zlog_debug ("%s: ignoring prefix %s in lsa %s: "
+			  "prefix is connected", __func__, buf, lsa->name);
+	    }
 
 	  /* ignore this prefix */
 	  continue;
@@ -1412,49 +1597,56 @@ __ospf6_intra_process_route_table (struct ospf6_route_table *route_table)
 	    {
 	      /* add route */
 	      int i;
-	      bool routablenexthop = false;
+	      bool routablenexthop = true;
 
 	      for (i = 0; ospf6_nexthop_is_set (&route->nexthop[i]) &&
 		     i < OSPF6_MULTI_PATH_LIMIT; i++)
 		{
-		  if (route->nexthop[i].directly_connected)
-		    {
-		      routablenexthop = true;
-		    }
-		  else
-		    {
-		      struct ospf6_route *nhroute;
-		      struct prefix nexthop = {
-			.family = route->prefix.family,
-			.u = {
-			  .prefix6 = route->nexthop[i].address,
-			},
-		      };
+                  struct prefix nexthop;
+                  struct ospf6_route *nhroute;
 
-		      if (ospf6_af_is_ipv4 (ospf6) && ospf6->af_interop)
-			nexthop.prefixlen = 32;
-		      else
-			nexthop.prefixlen = 128;
+                  if (!ospf6_af_is_ipv4 (ospf6))
+                    {
+                      assert (IN6_IS_ADDR_LINKLOCAL (&route->nexthop[i].address) ||
+                              IN6_IS_ADDR_UNSPECIFIED (&route->nexthop[i].address));
+                      continue;
+                    }
+                  else if (ospf6_route_directly_connected (&route->prefix,
+                                                           &route->nexthop[i]))
+                    {
+                      continue;
+                    }
 
-		      nhroute =
-			ospf6_route_lookup_bestmatch (&nexthop, route_table);
+                  nexthop = (struct prefix) {
+                    .family = route->prefix.family,
+                    .u = {
+                      .prefix6 = route->nexthop[i].address,
+                    },
+                  };
 
-		      /* nhroute->flag == OSPF6_ROUTE_BEST implies
-		       * that nhroute has already been processed since
-		       * other route flags are cleared in each case.
-		       * route is skipped if nhroute has not been
-		       * processed yet because zebra or the kernel can
-		       * reject routes with unreachable nexthops.  If
-		       * skipped, route will get added in the second
-		       * pass since any prerequisite nexthops should
-		       * have been added during the first pass.
-		       */
-		      if (nhroute && nhroute->flag == OSPF6_ROUTE_BEST)
-			routablenexthop = true;
-		    }
+                  if (ospf6_af_is_ipv4 (ospf6) && ospf6->af_interop)
+                    nexthop.prefixlen = 32;
+                  else
+                    nexthop.prefixlen = 128;
 
-		  if (routablenexthop)
-		    break;
+                  nhroute =
+                    ospf6_route_lookup_bestmatch (&nexthop, route_table);
+
+                  /* nhroute->flag == OSPF6_ROUTE_BEST implies
+                   * that nhroute has already been processed since
+                   * other route flags are cleared in each case.
+                   * route is skipped if nhroute has not been
+                   * processed yet because zebra or the kernel can
+                   * reject routes with unreachable nexthops.  If
+                   * skipped, route will get added in the second
+                   * pass since any prerequisite nexthops should
+                   * have been added during the first pass.
+                   */
+                  if (nhroute == NULL || nhroute->flag != OSPF6_ROUTE_BEST)
+                    {
+                      routablenexthop = false;
+                      break;
+                    }
 		}
 
 	      if (routablenexthop)
@@ -1582,7 +1774,7 @@ ospf6_intra_route_calculation_connected (struct ospf6_area *oa)
 	  struct ospf6_route *copy;
 
 	  if (ospf6_af_validate_prefix (oa->ospf6, &route->prefix.u.prefix6,
-					route->prefix.prefixlen))
+					route->prefix.prefixlen, false))
 	    {
 	      if (IS_OSPF6_DEBUG_EXAMIN (INTRA_PREFIX))
 		{
@@ -1610,12 +1802,11 @@ ospf6_intra_route_calculation_connected (struct ospf6_area *oa)
 	  copy->path.cost = oi->cost;
 
 	  copy->nexthop[0].ifindex = oi->interface->ifindex;
-	  copy->nexthop[0].directly_connected = true;
 
 	  if (IS_OSPF6_DEBUG_EXAMIN (INTRA_PREFIX))
 	    {
 	      char buf[PREFIXSTRLEN];
-	      ospf6_prefix2str (oa->ospf6, &route->prefix, buf, sizeof (buf));
+	      ospf6_prefix2str (oa->ospf6, &copy->prefix, buf, sizeof (buf));
 	      zlog_debug ("Adding route to connected prefix %s "
 			  "for interface %s", buf, oi->interface->name);
 	    }

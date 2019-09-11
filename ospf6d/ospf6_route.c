@@ -827,6 +827,38 @@ ospf6_route_table_delete (struct ospf6_route_table *table)
   XFREE (MTYPE_OSPF6_ROUTE, table);
 }
 
+bool
+ospf6_route_directly_connected (struct prefix *destprefix,
+                                struct ospf6_nexthop *nexthop)
+{
+  struct prefix nhprefix;
+
+  assert (ospf6_af_is_ipv4 (ospf6));
+
+  if (prefix_default (destprefix))
+    return false;
+
+  if (nexthop->ifindex != 0 && IN6_IS_ADDR_UNSPECIFIED (&nexthop->address))
+    return true;
+
+  nhprefix = (struct prefix) {
+    .family = destprefix->family,
+    .u = {
+      .prefix6 = nexthop->address,
+    },
+  };
+
+  if (ospf6_af_is_ipv4 (ospf6) && ospf6->af_interop)
+    nhprefix.prefixlen = 32;
+  else
+    nhprefix.prefixlen = 128;
+
+  if (prefix_match (destprefix, &nhprefix))
+    return true;
+
+  return false;
+}
+
 
 /* VTY commands */
 void

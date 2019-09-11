@@ -35,7 +35,7 @@
 #include "ospf6_top.h"
 #include "ospf6_mdr_flood.h"
 
-void
+int
 ospf6_flood_interface_mdr (struct ospf6_neighbor *from,
                            struct ospf6_lsa *lsa, struct ospf6_interface *oi)
 {
@@ -242,7 +242,7 @@ ospf6_flood_interface_mdr (struct ospf6_neighbor *from,
       if (is_debug)
 	zlog_debug ("Not flooding LSA %s on interface %s",
 		    lsa->name, oi->interface->name);
-      return;
+      return 0;
     }
 
   if (from && from->ospf6_if == oi)
@@ -258,6 +258,8 @@ ospf6_flood_interface_mdr (struct ospf6_neighbor *from,
     ospf6_send_lsupdate_delayed_msec (master, ospf6_lsupdate_send_interface,
                                       oi, oi->flood_delay,
                                       oi->thread_send_lsupdate);
+
+  return 1;
 }
 
 /* RFC 5614: 8.2 */

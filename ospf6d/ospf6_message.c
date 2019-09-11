@@ -50,7 +50,7 @@
 #include "ospf6_lls.h"
 #include "ospf6_mdr_flood.h"
 #include "ospf6_mdr_message.h"
-#include "ospf6_intra.h"        //for OSPF6_ROUTER_LSA_SCHEDULE
+#include "ospf6_intra.h"
 
 #include <netinet/ip6.h>
 
@@ -316,7 +316,16 @@ ospf6_hello_recv (struct in6_addr *src, struct in6_addr *dst,
     }
 
   /* always override neighbor's source address and ifindex */
-  on->ifindex = ntohl (hello->interface_id);
+  if (on->ifindex != ntohl (hello->interface_id))
+    {
+      on->ifindex = ntohl (hello->interface_id);
+      if ((on->state == OSPF6_NEIGHBOR_FULL &&
+           (!(oi->type == OSPF6_IFTYPE_BROADCAST ||
+              oi->type == OSPF6_IFTYPE_NBMA) ||
+            on->router_id == oi->drouter)) ||
+          (oi->type == OSPF6_IFTYPE_MDR && on->mdr.adv))
+        ospf6_router_lsa_schedule (oi->area);
+    }
   memcpy (&on->linklocal_addr, src, sizeof (struct in6_addr));
 
   /* run neighbor hello callbacks */

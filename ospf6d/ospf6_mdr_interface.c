@@ -56,17 +56,23 @@ ospf6_mdr_interface_create (struct ospf6_interface *oi)
   oi->mdr.full_hello_count = 0;
 }
 
+/* set default values for MDR interfaces from RFC 5614, Section 3.2 */
 void
 ospf6_mdr_interface_configure_defaults (struct ospf6_interface *oi)
 {
   assert (oi->type == OSPF6_IFTYPE_MDR);
 
-  /* default values from for MDR interfaces from RFC 5614, Section 3.2 */
-  oi->hello_interval = 2;
-  oi->dead_interval = 6;
-  oi->rxmt_interval = 7;
+  if (!(oi->config_status & HELLO_INTERVAL_CONFIGURED))
+    oi->hello_interval = OSPF6_MDR_HELLO_INTERVAL;
 
-  oi->LinkLSASuppression = 1;
+  if (!(oi->config_status & DEAD_INTERVAL_CONFIGURED))
+    oi->dead_interval = OSPF6_MDR_DEAD_INTERVAL;
+
+  if (!(oi->config_status & RXMT_INTERVAL_CONFIGURED))
+    oi->rxmt_interval = OSPF6_MDR_RXMT_INTERVAL;
+
+  if (!(oi->config_status & LINK_LSA_SUPPRESSION_CONFIGURED))
+    oi->LinkLSASuppression = 1;
 }
 
 void

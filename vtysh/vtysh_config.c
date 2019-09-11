@@ -318,6 +318,22 @@ vtysh_config_dump (FILE *fp)
       {
 	for (ALL_LIST_ELEMENTS (master, node, nnode, config))
 	  {
+            int suppress_empty_config;
+
+            switch (i)
+              {
+              case INTERFACE_NODE:
+                suppress_empty_config = 1;
+                break;
+
+              default:
+                suppress_empty_config = 0;
+                break;
+              }
+
+            if (suppress_empty_config && list_isempty (config->line))
+              continue;
+
 	    fprintf (fp, "%s\n", config->name);
 	    fflush (fp);
 

@@ -279,7 +279,6 @@ ospf6_lsa_premature_aging (struct ospf6_lsa *lsa)
 
   THREAD_OFF (lsa->expire);
   THREAD_OFF (lsa->refresh);
-  assert (!lsa->delay);
 
   lsa->header->age = htons (MAXAGE);
   thread_execute (master, ospf6_lsa_expire, lsa, 0);
@@ -555,7 +554,6 @@ ospf6_lsa_delete (struct ospf6_lsa *lsa)
   /* cancel threads */
   THREAD_OFF (lsa->expire);
   THREAD_OFF (lsa->refresh);
-  THREAD_OFF (lsa->delay);
 
   ospf6_backupwait_lsa_delete (lsa);
 
@@ -621,7 +619,6 @@ ospf6_lsa_expire (struct thread *thread)
   assert (lsa && lsa->header);
   assert (OSPF6_LSA_IS_MAXAGE (lsa));
   assert (! lsa->refresh);
-  assert (! lsa->delay);
 
   lsa->expire = (struct thread *) NULL;
 

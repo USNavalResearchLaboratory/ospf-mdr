@@ -205,7 +205,7 @@ __ospf6_interface_update_neighbor_metric (struct ospf6_neighbor *on,
 			"router lsa", __func__, on->name, delta,
 			nbrmetric->metric_update_hysteresis);
 
-	  OSPF6_ROUTER_LSA_SCHEDULE (oi->area);
+	  ospf6_router_lsa_schedule (oi->area);
 	}
 
       if (on->state == OSPF6_NEIGHBOR_FULL ||

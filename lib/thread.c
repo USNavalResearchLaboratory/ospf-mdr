@@ -722,6 +722,12 @@ funcname_thread_add_read (struct thread_master *m,
 
   assert (m != NULL);
 
+  if (fd < 0)
+    {
+      zlog (NULL, LOG_ERR, "Invalid read fd [%d]", fd);
+      return NULL;
+    }
+
   if (FD_ISSET (fd, &m->readfd))
     {
       zlog (NULL, LOG_WARNING, "There is already read fd [%d]", fd);
@@ -744,6 +750,12 @@ funcname_thread_add_write (struct thread_master *m,
   struct thread *thread;
 
   assert (m != NULL);
+
+  if (fd < 0)
+    {
+      zlog (NULL, LOG_ERR, "Invalid write fd [%d]", fd);
+      return NULL;
+    }
 
   if (FD_ISSET (fd, &m->writefd))
     {

@@ -258,6 +258,8 @@ ospf6_area_delete (struct ospf6_area *oa)
   ospf6_route_table_delete (oa->route_table);
 
   THREAD_OFF (oa->thread_spf_calculation);
+  THREAD_OFF (oa->thread_router_lsa);
+  THREAD_OFF (oa->thread_intra_prefix_lsa);
 
   for (n = listtail (&ospf6_area_operations_list); n != NULL; n = n->prev)
     {
@@ -443,6 +445,8 @@ ospf6_area_disable (struct ospf6_area *oa)
   UNSET_FLAG (oa->flag, OSPF6_AREA_ENABLE);
 
   THREAD_OFF (oa->thread_spf_calculation);
+  THREAD_OFF (oa->thread_router_lsa);
+  THREAD_OFF (oa->thread_intra_prefix_lsa);
 
   for (ALL_LIST_ELEMENTS (oa->if_list, node, nnode, oi))
     ospf6_interface_disable (oi);

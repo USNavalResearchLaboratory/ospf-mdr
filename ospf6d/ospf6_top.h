@@ -69,8 +69,6 @@ struct ospf6
 
   struct thread *maxage_remover;
 
-  struct list *delayed_lsa_list;
-
   u_int16_t min_lsa_arrival;
   u_int16_t min_lsa_interval;
 

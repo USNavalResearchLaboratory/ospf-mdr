@@ -245,11 +245,19 @@ descending or ascending order.  Routes are installed in the order
 received when no @command{sort-nexthops} option is specified.
 @end deffn
 
-@deffn Command {netlink linkmetrics-multicast-group <1-64>} {}
-@deffnx {Command} {no netlink linkmetrics-multicast-group} {}
-Use the given netlink multicast group to receive RFC 4938 link status
-and link metrics notifications.  The multicast group id must match the
-group used by the message producer, typically a kernel module.
+@deffn Command {netlink linkmetrics-family @var{NAME}} {}
+@deffnx {Command} {no netlink linkmetrics-family} {}
+Use the given generic netlink family to receive RFC 4938 link status
+and link metrics notifications.  The family name must match the family
+used by the message producer, typically a kernel module.
+@end deffn
+
+@deffn Command {netlink linkmetrics-group @var{NAME}} {}
+@deffnx {Command} {no netlink linkmetrics-group} {}
+Use the given generic netlink multicast group to receive RFC 4938 link
+status and link metrics notifications.  The multicast group name must
+match the group used by the message producer, typically a kernel
+module.
 @end deffn
 
 @node zebra Terminal Mode Commands

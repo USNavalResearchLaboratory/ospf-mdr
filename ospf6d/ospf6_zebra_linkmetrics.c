@@ -97,7 +97,13 @@ ospf6_neighbor_lookup_by_ifaddr (struct in6_addr *linklocal_addr,
   struct listnode *n;
   struct ospf6_neighbor *on;
 
-  assert (IN6_IS_ADDR_LINKLOCAL (linklocal_addr));
+  if (!IN6_IS_ADDR_LINKLOCAL (linklocal_addr))
+    {
+      char buf[INET6_ADDRSTRLEN];
+      ospf6_addr2str6 (linklocal_addr, buf, sizeof (buf));
+      zlog_err ("%s: invalid link-local address: %s", __func__, buf);
+      return NULL;
+    }
 
   for (ALL_LIST_ELEMENTS_RO (oi->neighbor_list, n, on))
     if (IN6_ARE_ADDR_EQUAL (&on->linklocal_addr, linklocal_addr))
@@ -141,6 +147,19 @@ ospf6_zebra_linkmetrics (int command, struct zclient *zclient,
     {
       zlog_err ("%s: unknown interface index: %d",
 		__func__, linkmetrics.ifindex);
+      return -1;
+    }
+
+  if (!IN6_IS_ADDR_LINKLOCAL (&linkmetrics.linklocal_addr))
+    {
+      if (IS_OSPF6_DEBUG_ZEBRA (RECV))
+        {
+          char lladdrstr[INET6_ADDRSTRLEN];
+          ospf6_addr2str6 (&linkmetrics.linklocal_addr,
+                           lladdrstr, sizeof (lladdrstr));
+          zlog_err ("%s: non-link-local neighbor address: %s",
+                    __func__, lladdrstr);
+        }
       return -1;
     }
 
@@ -190,6 +209,19 @@ ospf6_zebra_linkstatus (int command, struct zclient *zclient,
     {
       zlog_err ("%s: unknown interface index: %d",
 		__func__, linkstatus.ifindex);
+      return -1;
+    }
+
+  if (!IN6_IS_ADDR_LINKLOCAL (&linkstatus.linklocal_addr))
+    {
+      if (IS_OSPF6_DEBUG_ZEBRA (RECV))
+        {
+          char lladdrstr[INET6_ADDRSTRLEN];
+          ospf6_addr2str6 (&linkstatus.linklocal_addr,
+                           lladdrstr, sizeof (lladdrstr));
+          zlog_err ("%s: non-link-local neighbor address: %s",
+                    __func__, lladdrstr);
+        }
       return -1;
     }
 

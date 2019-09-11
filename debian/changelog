@@ -1,0 +1,23 @@
+quagga-mr (0.99.21mr2.2) unstable; urgency=low
+
+  * Maintenance release; see RELEASE_NOTES.MobileRouting.
+
+ -- Tom Goff <thomas.goff@boeing.com>  Wed, 25 Jul 2012 10:02:41 -0700
+
+quagga-mr (0.99.20mr2.1) unstable; urgency=low
+
+  * Maintenance release; see RELEASE_NOTES.MobileRouting.
+
+ -- Tom Goff <thomas.goff@boeing.com>  Tue, 24 Jan 2012 10:31:40 -0800
+
+quagga-mr (0.99.17mr2.0) unstable; urgency=low
+
+  * Maintenance release; see RELEASE_NOTES.MobileRouting.
+
+ -- Tom Goff <thomas.goff@boeing.com>  Wed, 04 May 2011 16:03:45 -0700
+
+quagga-mr (0.99.16mr1.0) unstable; urgency=low
+
+  * Initial package.
+
+ -- Tom Goff <thomas.goff@boeing.com>  Wed, 23 Jun 2010 15:20:29 -0700

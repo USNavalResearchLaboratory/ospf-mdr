@@ -27,18 +27,16 @@
 #ifndef _LINKMETRICS_NETLINK_H_
 #define _LINKMETRICS_NETLINK_H_
 
-#if !defined (HAVE_LIBNL)
-#define linkmetrics_netlink_init() (0)
-#define linkmetrics_netlink_close() {}
-#else
-/* Local function prototypes */
-int linkmetrics_netlink_init (void);
+#include "lmgenl.h"
+
+/* function prototypes */
+int linkmetrics_netlink_init (const char *genlfamily, const char *genlgroup);
 void linkmetrics_netlink_close (void);
 
+#ifdef HAVE_LIBNLGENL
 /* LM generic netlink structure */
 typedef struct {
-  /* newer versions of libnl use struct nl_sock instead of struct nl_handle */
-  struct nl_handle *sk;
+  struct nl_sock *sk;
   int lmgenl_family;
   int lmgenl_mcgroup;
   struct thread *lmread_thread;
@@ -95,13 +93,10 @@ enum {
    LINKMETRICS_STATUS_UP,
 };
 
-#define DEFAULT_LMGENL_MCGROUP_ID 2
-
 /* Global variables */
 extern lmsock_t lmgenl_sock;
-extern int lmgenl_mcgroup_id;
 
 int lmgenl_write (lmm_rqst_msg_t *msg);
-#endif	/* defined (HAVE_LIBNL) */
+#endif	/* HAVE_LIBNLGENL */
 
 #endif /* _LINKMETRICS_NETLINK_H_ */

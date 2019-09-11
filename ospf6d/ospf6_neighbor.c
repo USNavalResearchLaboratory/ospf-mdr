@@ -155,6 +155,8 @@ ospf6_neighbor_delete (struct ospf6_neighbor *on)
   struct ospf6_interface_neighbor *ifn;
   struct listnode *node;
 
+  ospf6_neighbor_state_change (OSPF6_NEIGHBOR_DOWN, on);
+
   ospf6_lsdb_remove_all (on->summary_list);
   ospf6_lsdb_remove_all (on->request_list);
   for (lsa = ospf6_lsdb_head (on->retrans_list); lsa;
@@ -360,13 +362,13 @@ ospf6_neighbor_state_change (u_char next_state, struct ospf6_neighbor *on)
   else
   if (prev_state == OSPF6_NEIGHBOR_FULL || next_state == OSPF6_NEIGHBOR_FULL)
     {
-      OSPF6_ROUTER_LSA_SCHEDULE (oi->area);
+      ospf6_router_lsa_schedule (oi->area);
       if (oi->state == OSPF6_INTERFACE_DR)
         {
-          OSPF6_NETWORK_LSA_SCHEDULE (oi);
-          OSPF6_INTRA_PREFIX_LSA_SCHEDULE_TRANSIT (oi);
+          ospf6_network_lsa_schedule (oi);
+          ospf6_intra_prefix_lsa_schedule_transit (oi);
         }
-      OSPF6_INTRA_PREFIX_LSA_SCHEDULE_STUB (oi->area);
+      ospf6_intra_prefix_lsa_schedule_stub (oi->area);
     }
 
   if ((prev_state == OSPF6_NEIGHBOR_EXCHANGE ||

@@ -37,9 +37,9 @@ struct ospf6_neighbor;
 struct ospf6_lsa;
 struct ospf6_interface;
 
-extern void ospf6_flood_interface_mdr (struct ospf6_neighbor *from,
-				       struct ospf6_lsa *lsa,
-				       struct ospf6_interface *oi);
+extern int ospf6_flood_interface_mdr (struct ospf6_neighbor *from,
+                                      struct ospf6_lsa *lsa,
+                                      struct ospf6_interface *oi);
 extern void ospf6_mdr_acknowledge_lsa_allother (struct ospf6_lsa *lsa,
 						struct ospf6_interface *oi,
 						struct in6_addr *dst);

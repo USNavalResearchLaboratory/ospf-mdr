@@ -6,7 +6,6 @@ INSTALL_SDATA=@INSTALL@ -m 600
 
 LIB_IPV6 = @LIB_IPV6@
 LIBCAP = @LIBCAP@
-LIBNL = @LIBNL@
 
 ipforward = @IPFORWARD@
 if_method = @IF_METHOD@
@@ -20,7 +19,7 @@ ioctl_method = @IOCTL_METHOD@
 otherobj = $(ioctl_method) $(ipforward) $(if_method) $(if_proc) \
 	$(rt_method) $(rtread_method) $(kernel_method) $(other_method)
 
-AM_CFLAGS = $(PICFLAGS)
+AM_CFLAGS = $(PICFLAGS) $(GENL_CFLAGS)
 AM_LDFLAGS = $(PILDFLAGS)
 
 sbin_PROGRAMS = zebra
@@ -31,11 +30,7 @@ zebra_SOURCES = \
 	zserv.c main.c interface.c connected.c zebra_rib.c zebra_routemap.c \
 	redistribute.c debug.c rtadv.c zebra_snmp.c zebra_vty.c \
 	irdp_main.c irdp_interface.c irdp_packet.c router-id.c \
-	zserv_linkmetrics.c
-
-if LIBNL
-zebra_SOURCES += linkmetrics_netlink.c
-endif
+	zserv_linkmetrics.c linkmetrics_netlink.c
 
 testzebra_SOURCES = test_main.c zebra_rib.c interface.c connected.c debug.c \
 	zebra_vty.c \
@@ -44,13 +39,9 @@ testzebra_SOURCES = test_main.c zebra_rib.c interface.c connected.c debug.c \
 noinst_HEADERS = \
 	connected.h ioctl.h rib.h rt.h zserv.h redistribute.h debug.h rtadv.h \
 	interface.h ipforward.h irdp.h router-id.h kernel_socket.h \
-	zserv_linkmetrics.h
+	zserv_linkmetrics.h linkmetrics_netlink.h
 
-if LIBNL
-noinst_HEADERS += linkmetrics_netlink.h
-endif
-
-zebra_LDADD = $(otherobj) $(LIBCAP) $(LIB_IPV6) ../lib/libzebra.la $(LIBNL)
+zebra_LDADD = $(otherobj) $(LIBCAP) $(LIB_IPV6) $(GENL_LIBS) ../lib/libzebra.la
 
 testzebra_LDADD = $(LIBCAP) $(LIB_IPV6) ../lib/libzebra.la
 

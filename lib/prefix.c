@@ -903,4 +903,34 @@ inet6_ntoa (struct in6_addr addr)
   inet_ntop (AF_INET6, &addr, buf, INET6_ADDRSTRLEN);
   return buf;
 }
+
+int
+prefix_ipv6_default (const struct prefix_ipv6 *p)
+{
+  return (p->prefixlen == 0 && IN6_IS_ADDR_UNSPECIFIED (&p->prefix));
+}
 #endif /* HAVE_IPV6 */
+
+int
+prefix_default (const struct prefix *p)
+{
+  switch (p->family)
+    {
+    case AF_INET:
+      return prefix_ipv4_any (p);
+      break;
+
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      return prefix_ipv6_default (p);
+      break;
+#endif /* HAVE_IPV6 */
+
+    default:
+      assert (0);
+      break;
+    }
+
+  return 0;
+}
+

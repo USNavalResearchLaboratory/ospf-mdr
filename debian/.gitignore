@@ -1,0 +1,8 @@
+quagga-mr.substvars
+quagga-mr.*.debhelper
+quagga-mr
+quagga-mr-doc.substvars
+quagga-mr-doc.*.debhelper
+quagga-mr-doc
+*.debhelper.log
+files

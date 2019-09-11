@@ -588,6 +588,9 @@ nexthop_active_ipv4 (struct rib *rib, struct nexthop *nexthop, int set,
   struct rib *match;
   struct nexthop *newhop;
 
+  assert (nexthop->type == NEXTHOP_TYPE_IPV4 ||
+          nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX);
+
   if (nexthop->type == NEXTHOP_TYPE_IPV4)
     nexthop->ifindex = 0;
 
@@ -610,17 +613,9 @@ nexthop_active_ipv4 (struct rib *rib, struct nexthop *nexthop, int set,
     {
       route_unlock_node (rn);
       
-      /* If lookup self prefix return immidiately, but
-       * do not return for ospf6.  The host routes
-       * installed by ospf6 should be kept. */
+      /* If lookup self prefix return immediately. */
       if (rn == top)
-      {
-        match = rn->info;
-        //force the installation of OSPF and OSPF6 host routes
-        if (!match || !(match->type == ZEBRA_ROUTE_OSPF6  ||
-                        match->type == ZEBRA_ROUTE_OSPF))
 	return 0;
-      }
 
       /* Pick up selected route. */
       for (match = rn->info; match; match = match->next)
@@ -653,18 +648,16 @@ nexthop_active_ipv4 (struct rib *rib, struct nexthop *nexthop, int set,
 	      
 	      return 1;
 	    }
-        //Enable the use of OSPF and OSPF6 routes as the nexthop
-        //this is important when allowing host routes.
-        else if (match->type == ZEBRA_ROUTE_OSPF6 ||
-                 match->type == ZEBRA_ROUTE_OSPF)
-        {
-          /* OSPF point connected route. */
-          newhop = match->nexthop;
-          if (newhop && nexthop->type == NEXTHOP_TYPE_IPV4)
-            nexthop->ifindex = newhop->ifindex;
-
-          return 1;
-        }
+          else if (nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX)
+            {
+              for (newhop = match->nexthop; newhop; newhop = newhop->next)
+                {
+                  if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB) &&
+                      nexthop->ifindex == newhop->ifindex)
+                    return 1;
+                }
+              return 0;
+            }
 	  else if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
 	    {
 	      for (newhop = match->nexthop; newhop; newhop = newhop->next)
@@ -708,6 +701,9 @@ nexthop_active_ipv6 (struct rib *rib, struct nexthop *nexthop, int set,
   struct route_node *rn;
   struct rib *match;
   struct nexthop *newhop;
+
+  assert (nexthop->type == NEXTHOP_TYPE_IPV6 ||
+          nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX);
 
   if (nexthop->type == NEXTHOP_TYPE_IPV6)
     nexthop->ifindex = 0;
@@ -767,6 +763,16 @@ nexthop_active_ipv6 (struct rib *rib, struct nexthop *nexthop, int set,
 	      
 	      return 1;
 	    }
+          else if (nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX)
+            {
+              for (newhop = match->nexthop; newhop; newhop = newhop->next)
+                {
+                  if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB) &&
+                      nexthop->ifindex == newhop->ifindex)
+                    return 1;
+                }
+              return 0;
+            }
 	  else if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
 	    {
 	      for (newhop = match->nexthop; newhop; newhop = newhop->next)

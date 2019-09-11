@@ -27,6 +27,9 @@ class TestOspfv3Mdr(quagga.test.QuaggaTestCase):
     numnodes = None
     af = None
 
+    stableDuration = 4
+    stableWait = 60
+
     quagga_conf_template = '''\
 debug ospf6 neighbor state
 debug ospf6 mdr
@@ -56,7 +59,7 @@ router ospf6
 
         for i in xrange(self.numnodes):
             d = {'instanceid': instanceid,
-                 'routerid': '0.0.0.%s' % (i + 1),
+                 'routerid': quagga.node.RouterId(i + 1),
                  }
             self.topology.n[i].quagga_conf = self.quagga_conf_template % d
 
@@ -64,8 +67,10 @@ router ospf6
 
     def CheckOspfv3Stable(self):
         # wait to converge
-        stable = ospfv3.Ospfv3StableBarrier(self.topology, stableDuration = 4)
-        stable.Wait(60)
+        stable = \
+            ospfv3.Ospfv3StableBarrier(self.topology,
+                                       stableDuration = self.stableDuration)
+        stable.Wait(self.stableWait)
 
     def CheckOspfv3Neighbors(self):
         for n in self.topology.n:

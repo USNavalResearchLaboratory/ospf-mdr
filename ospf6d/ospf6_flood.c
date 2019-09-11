@@ -89,123 +89,11 @@ ospf6_get_scoped_lsdb_self (struct ospf6_lsa *lsa)
   return lsdb_self;
 }
 
-/*
- * Remove lsa from delayed lsa list.
- * Return 0 if lsa was found and removed, non-zero otherwise.
- */
-static int
-ospf6_remove_delayed_lsa (struct ospf6_lsa *lsa)
-{
-  struct listnode *node;
-  struct ospf6_lsa *delayed_lsa;
-
-  for (ALL_LIST_ELEMENTS_RO (ospf6->delayed_lsa_list, node, delayed_lsa))
-    if (delayed_lsa == lsa)
-      break;
-
-  if (node)
-    {
-      list_delete_node (ospf6->delayed_lsa_list, node);
-      return 0;
-    }
-
-  return -1;
-}
-
-/*
- * Simple wrapper function that has the right signature for a list
- * delete callback.
- */
-void
-ospf6_lsa_list_delete (void *data)
-{
-  struct ospf6_lsa *lsa = data;
-
-  ospf6_lsa_delete (lsa);
-}
-
-/*
- * Delayed lsa callback: check that the thread argument lsa is a valid
- * delayed lsa then originate it.
- */
-static int
-ospf6_lsa_delayed_originate (struct thread *thread)
-{
-  struct ospf6_lsa *lsa;
-
-  assert (thread);
-
-  lsa = THREAD_ARG (thread);
-  assert (lsa);
-
-  if (ospf6_remove_delayed_lsa (lsa))
-    {
-      zlog_err ("%s: lsa %s (%p) not in delayed lsa list",
-		__func__, lsa->name, lsa);
-      return 0;
-    }
-
-  if (IS_OSPF6_DEBUG_ORIGINATE_TYPE (lsa->header->type))
-    zlog_debug ("%s: originating delayed LSA: %s", __func__, lsa->name);
-
-  lsa->delay = NULL;
-  ospf6_lsa_originate (lsa);
-
-  return 0;
-}
-
-/*
- * Find a matching lsa in the delayed lsa list.  A matching lsa has
- * the same advertising router, LS type, and LS ID.
- *
- * Returns the corresponding list node if a match is found, NULL
- * otherwise.
- */
-static struct listnode
-*ospf6_find_matching_delayed_lsa_node (struct ospf6_lsa *lsa)
-{
-  struct listnode *node;
-  struct ospf6_lsa *delayed_lsa;
-
-  for (ALL_LIST_ELEMENTS_RO (ospf6->delayed_lsa_list, node, delayed_lsa))
-    if (OSPF6_LSA_IS_SAME (delayed_lsa, lsa))
-      return node;
-
-  return NULL;
-}
-
 void
 ospf6_lsa_originate (struct ospf6_lsa *lsa)
 {
   struct ospf6_lsa *old;
   struct ospf6_lsdb *lsdb_self;
-  struct listnode *delayed_lsa_node;
-
-  delayed_lsa_node = ospf6_find_matching_delayed_lsa_node (lsa);
-  if (delayed_lsa_node)
-    {
-      struct ospf6_lsa *delayed_lsa = listgetdata (delayed_lsa_node);
-
-      if (! OSPF6_LSA_IS_DIFFER (lsa, delayed_lsa))
-	{
-	  if (IS_OSPF6_DEBUG_ORIGINATE_TYPE (lsa->header->type))
-	    zlog_debug ("%s: Suppress updating LSA "
-			"(same LSA already delayed): %s",
-			__func__, lsa->name);
-	  ospf6_lsa_delete (lsa);
-	  return;
-	}
-      else if (ntohl (lsa->header->seqnum) >=
-	       ntohl (delayed_lsa->header->seqnum))
-        {
-	  /* delayed lsa is different and is superseded by this lsa */
-	  if (IS_OSPF6_DEBUG_ORIGINATE_TYPE (lsa->header->type))
-	    zlog_debug ("%s: updating delayed LSA %s with %s",
-			__func__, delayed_lsa->name, lsa->name);
-	  list_delete_node (ospf6->delayed_lsa_list, delayed_lsa_node);
-	  ospf6_lsa_delete (delayed_lsa);
-	}
-    }
 
   /* find previous LSA */
   old = ospf6_lsdb_lookup (lsa->header->type, lsa->header->id,
@@ -227,20 +115,9 @@ ospf6_lsa_originate (struct ospf6_lsa *lsa)
 
       delay_msec =
 	1000 * ospf6->min_lsa_interval - elapsed_msec (&old->originated);
-      if (delay_msec > 0)
-	{
-	  if (IS_OSPF6_DEBUG_ORIGINATE_TYPE (lsa->header->type))
-	    zlog_debug ("%s: delaying LSA %s by %li msec to satisfy "
-			"MinLSInterval", __func__, lsa->name, delay_msec);
-	  listnode_add (ospf6->delayed_lsa_list, lsa);
-	  lsa->delay =
-	    thread_add_timer_msec (master, ospf6_lsa_delayed_originate,
-				   lsa, delay_msec);
-	  return;
-	}
+      if (delay_msec > 0 && IS_OSPF6_DEBUG_ORIGINATE_TYPE (lsa->header->type))
+        zlog_debug ("Originating LSA %s violates MinLSInterval", lsa->name);
     }
-
-  quagga_gettime (QUAGGA_CLK_MONOTONIC, &lsa->originated);
 
   /* store it in the LSDB for self-originated LSAs */
   lsdb_self = ospf6_get_scoped_lsdb_self (lsa);
@@ -291,7 +168,6 @@ ospf6_lsa_purge (struct ospf6_lsa *lsa)
 {
   struct ospf6_lsa *self;
   struct ospf6_lsdb *lsdb_self;
-  struct listnode *delayed_lsa_node;
 
   /* remove it from the LSDB for self-originated LSAs */
   lsdb_self = ospf6_get_scoped_lsdb_self (lsa);
@@ -302,15 +178,6 @@ ospf6_lsa_purge (struct ospf6_lsa *lsa)
       THREAD_OFF (self->expire);
       THREAD_OFF (self->refresh);
       ospf6_lsdb_remove (self, lsdb_self);
-    }
-
-  /* remove any pending, previously delayed LSAs */
-  delayed_lsa_node = ospf6_find_matching_delayed_lsa_node (lsa);
-  if (delayed_lsa_node)
-    {
-      struct ospf6_lsa *delayed_lsa = listgetdata (delayed_lsa_node);
-      list_delete_node (ospf6->delayed_lsa_list, delayed_lsa_node);
-      ospf6_lsa_delete (delayed_lsa);
     }
 
   ospf6_lsa_premature_aging (lsa);
@@ -394,7 +261,7 @@ ospf6_install_lsa (struct ospf6_lsa *lsa)
 
 /* RFC2740 section 3.5.2. Sending Link State Update packets */
 /* RFC2328 section 13.3 Next step in the flooding procedure */
-static void
+static int
 ospf6_flood_interface (struct ospf6_neighbor *from,
                        struct ospf6_lsa *lsa, struct ospf6_interface *oi)
 {
@@ -405,12 +272,11 @@ ospf6_flood_interface (struct ospf6_neighbor *from,
   int is_debug = 0;
 
   if (oi->type == OSPF6_IFTYPE_LOOPBACK)
-    return;
+    return 0;
 
   if (oi->type == OSPF6_IFTYPE_MDR)
     {
-      ospf6_flood_interface_mdr (from, lsa, oi);
-      return;
+      return ospf6_flood_interface_mdr (from, lsa, oi);
     }
 
   if (IS_OSPF6_DEBUG_FLOODING ||
@@ -508,7 +374,7 @@ ospf6_flood_interface (struct ospf6_neighbor *from,
     {
       if (is_debug)
         zlog_debug ("No retransmission scheduled, next interface");
-      return;
+      return 0;
     }
 
   /* (3) If the new LSA was received on this interface,
@@ -518,7 +384,7 @@ ospf6_flood_interface (struct ospf6_neighbor *from,
     {
       if (is_debug)
         zlog_debug ("Received is from the I/F's DR or BDR, next interface");
-      return;
+      return 0;
     }
 
   /* (4) If the new LSA was received on this interface,
@@ -527,7 +393,7 @@ ospf6_flood_interface (struct ospf6_neighbor *from,
     {
       if (is_debug)
         zlog_debug ("Received is from the I/F, itself BDR, next interface");
-      return;
+      return 0;
     }
   if (from && from->ospf6_if == oi)
     SET_FLAG (lsa->flag, OSPF6_LSA_FLOODBACK);
@@ -561,6 +427,8 @@ ospf6_flood_interface (struct ospf6_neighbor *from,
                                               on->thread_send_lsupdate);
         }
     }
+
+  return 1;
 }
 
 static void
@@ -569,6 +437,7 @@ ospf6_flood_area (struct ospf6_neighbor *from,
 {
   struct listnode *node, *nnode;
   struct ospf6_interface *oi;
+  unsigned int flooded = 0;
 
   for (ALL_LIST_ELEMENTS (oa->if_list, node, nnode, oi))
     {
@@ -582,8 +451,11 @@ ospf6_flood_area (struct ospf6_neighbor *from,
         continue;
 #endif/*0*/
 
-      ospf6_flood_interface (from, lsa, oi);
+      flooded += ospf6_flood_interface (from, lsa, oi);
     }
+
+  if (flooded && !OSPF6_LSA_IS_MAXAGE (lsa))
+    quagga_gettime (QUAGGA_CLK_MONOTONIC, &lsa->originated);
 }
 
 static void

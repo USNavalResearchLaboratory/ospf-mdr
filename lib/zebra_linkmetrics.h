@@ -30,11 +30,11 @@
 #include <netinet/in.h>
 
 struct zebra_rfc4938_linkmetrics {
-  u_int8_t  rlq;
-  u_int8_t  resource;
-  u_int16_t latency;
-  u_int16_t current_datarate;
-  u_int16_t max_datarate;
+  u_int8_t  rlq;                /* 0-100 */
+  u_int8_t  resource;           /* 0-100 */
+  u_int16_t latency;            /* msec */
+  u_int16_t current_datarate;   /* kbps */
+  u_int16_t max_datarate;       /* kbps */
 };
 
 typedef struct zebra_linkmetrics {

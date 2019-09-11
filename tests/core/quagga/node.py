@@ -79,14 +79,15 @@ class KernelRoute(Route):
 class QuaggaNode(pycore.nodes.LxcNode):
     CONFDIR = ['/etc/quagga', '/usr/local/etc/quagga']
 
-    def __init__(self, session, name):
+    def __init__(self, session, name, nodeid = None):
         self.confdir = None
         for d in self.CONFDIR:
             if os.path.isdir(d):
                 self.confdir = d
                 break
         assert self.confdir is not None, 'no quagga config directory found'
-        pycore.nodes.LxcNode.__init__(self, session = session, name = name)
+        pycore.nodes.LxcNode.__init__(self, session = session,
+                                      name = name, objid = nodeid)
 
     def startup(self):
         pycore.nodes.LxcNode.startup(self)
@@ -101,17 +102,25 @@ class QuaggaNode(pycore.nodes.LxcNode):
         raise NotImplementedError
 
     def config(self):
+        # create Quagga configuration
         filename = os.path.join(self.confdir, 'Quagga.conf')
         f = self.opennodefile(filename, 'w')
         f.write(self.quagga_conf_file())
         f.close()
-        pycore.nodes.LxcNode.config(self)
+        # create startup script
+        f = self.opennodefile(self.bootsh, 'w')
+        f.write(self.bootscript())
+        f.close()
 
     def bootscript(self):
         return '''\
 #!/bin/sh -e
 
 STATEDIR=%s
+
+for f in /proc/sys/net/ipv4/conf/*/rp_filter; do
+    echo 0 > $f
+done
 
 waitfile()
 {
@@ -346,3 +355,18 @@ ipv6 forwarding
 !
 '''
         return common + self.quagga_conf
+
+class RouterId(object):
+    def __init__(self, routerid):
+        if isinstance(routerid, str):
+            self.routerid = ipaddr.IPAddr.fromstring(routerid)
+        elif isinstance(routerid, int):
+            self.routerid = ipaddr.IPAddr(ipaddr.AF_INET,
+                                          ipaddr.struct.pack('!L', routerid))
+        else:
+            msg = 'expected a string or integer router-id not \'%s\'' % \
+                str(routerid)
+            assert False, msg
+
+    def __str__(self):
+        return str(self.routerid)

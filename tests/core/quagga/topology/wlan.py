@@ -21,9 +21,9 @@ from core.misc import ipaddr
 import random
 
 class Wlan(Topology):
-    def __init__(self, numnodes, linkprob = 0.35, seed = None):
+    def __init__(self, numnodes, linkprob = 0.35, seed = None,
+                 ipv4prefix = '10.0.0.0/8', ipv6prefix = 'a::/64'):
         assert numnodes > 1
-        assert numnodes < 254
         Topology.__init__(self, numnodes)
 
         if seed is not None:
@@ -31,8 +31,8 @@ class Wlan(Topology):
 
         self.net = self.session.addobj(cls = pycore.nodes.WlanNode)
 
-        p4 = ipaddr.IPv4Prefix('10.0.0.0/24')
-        p6 = ipaddr.IPv6Prefix('a::/120')
+        p4 = ipaddr.IPv4Prefix(ipv4prefix)
+        p6 = ipaddr.IPv6Prefix(ipv6prefix)
 
         for i in xrange(numnodes):
             addrlist = ['%s/%s' % (p4.addr(i + 1), 32),

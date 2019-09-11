@@ -242,7 +242,7 @@ ospf6_zebra_read_ipv4 (int command, struct zclient *zclient,
       return 0;
     }
 
-  err = ospf6_af_validate_prefix (ospf6, &p.prefix, p.prefixlen);
+  err = ospf6_af_validate_prefix (ospf6, &p.prefix, p.prefixlen, true);
   if (err)
     {
       if (IS_OSPF6_DEBUG_ZEBRA (RECV))
@@ -346,7 +346,7 @@ ospf6_zebra_read_ipv6 (int command, struct zclient *zclient,
   p.prefixlen = stream_getc (s);
   stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
-  err = ospf6_af_validate_prefix (ospf6, &p.prefix, p.prefixlen);
+  err = ospf6_af_validate_prefix (ospf6, &p.prefix, p.prefixlen, true);
   if (err)
     {
       if (IS_OSPF6_DEBUG_ZEBRA (RECV))
@@ -410,22 +410,257 @@ ospf6_zebra_read_ipv6 (int command, struct zclient *zclient,
   return 0;
 }
 
-#define ADD    0
-#define REM    1
-static void
-ospf6_zebra_route_update (int type, struct ospf6_route *request)
+typedef enum
 {
-  char buf[64];
-  int nhcount;
-  unsigned int *ifindexes = NULL;
-  int i;
-  int ifcount = 0;
+  NONE,
+  ROUTE_ADD,
+  ROUTE_REMOVE,
+} ospf6_zebra_route_update_t;
+
+static void
+__ospf6_zebra_route_update (ospf6_zebra_route_update_t update,
+                            struct ospf6_route *route)
+{
+  bool af_is_ipv4;
+  struct prefix prefix;
+  struct prefix *p;
+  unsigned int i;
+  unsigned int nhcount;
+  u_char message;
+#if 0
+  u_char distance;
+#endif
+  u_char flags;
+  int psize;
+  struct stream *s;
+
+  af_is_ipv4 = ospf6_af_is_ipv4 (ospf6);
+
+  if (af_is_ipv4)
+    {
+      int err;
+
+      err = ospf6_af_prefix_convert6to4 ((struct prefix_ipv4 *)&prefix,
+                                         (struct prefix_ipv6 *)&route->prefix);
+      if (err)
+        {
+          char buf[PREFIXSTRLEN];
+
+          prefix2str (&route->prefix, buf, sizeof (buf));
+	  zlog_warn ("%s: error converting destination prefix: %s",
+		     __func__, buf);
+          return;
+        }
+
+      p = &prefix;
+    }
+  else
+    {
+      p = &route->prefix;
+    }
+
+  for (i = 0; ospf6_nexthop_is_set (&route->nexthop[i]) &&
+       i < OSPF6_MULTI_PATH_LIMIT; i++)
+    {
+      /* nothing */
+    }
+  nhcount = i;
+
+  if (nhcount == 0)
+    {
+      if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+        zlog_debug ("  No nexthop, ignore");
+      return;
+    }
+
+  message = 0;
+  flags = 0;
+
+  /* OSPF pass nexthop and metric */
+  SET_FLAG (message, ZAPI_MESSAGE_NEXTHOP);
+  SET_FLAG (message, ZAPI_MESSAGE_METRIC);
+
+#if 0
+  /* Distance value. */
+  SET_FLAG (message, ZAPI_MESSAGE_DISTANCE);
+#endif
+
+  /* Make packet. */
+  s = zclient->obuf;
+  stream_reset (s);
+
+  /* Put command, type, flags, message. */
+  if (af_is_ipv4)
+    {
+      if (update == ROUTE_ADD)
+        zclient_create_header (s, ZEBRA_IPV4_ROUTE_ADD);
+      else
+        zclient_create_header (s, ZEBRA_IPV4_ROUTE_DELETE);
+    }
+  else
+    {
+      if (update == ROUTE_ADD)
+        zclient_create_header (s, ZEBRA_IPV6_ROUTE_ADD);
+      else
+        zclient_create_header (s, ZEBRA_IPV6_ROUTE_DELETE);
+    }
+
+  stream_putc (s, ZEBRA_ROUTE_OSPF6);
+  stream_putc (s, flags);
+  stream_putc (s, message);
+  stream_putw (s, SAFI_UNICAST);
+
+  /* Put prefix information. */
+  psize = PSIZE (p->prefixlen);
+  stream_putc (s, p->prefixlen);
+  stream_write (s, &p->u.prefix, psize);
+
+  /* Nexthop count. */
+  stream_putc (s, nhcount);
+
+  /* Nexthop, ifindex, distance and metric information. */
+  for (i = 0; i < nhcount; i++)
+    {
+      struct in_addr nhaddr;
+      void *addr;
+      size_t addrsize;
+      bool directly_connected;
+
+      if (!IN6_IS_ADDR_UNSPECIFIED (&route->nexthop[i].address))
+        {
+          if (af_is_ipv4)
+            {
+              int err;
+
+              err = ospf6_af_address_convert6to4 (&nhaddr,
+                                                  &route->nexthop[i].address);
+              if (err)
+                {
+                  char buf[INET6_ADDRSTRLEN];
+
+                  ospf6_addr2str6 (&route->nexthop[i].address,
+                                   buf, sizeof (buf));
+                  zlog_warn ("%s: error converting nexthop address: %s",
+                             __func__, buf);
+                  continue;
+                }
+
+              assert (nhaddr.s_addr != INADDR_ANY);
+              addr = &nhaddr;
+              addrsize = sizeof (nhaddr);
+            }
+          else
+            {
+              addr = &route->nexthop[i].address;
+              addrsize = sizeof (route->nexthop[i].address);
+            }
+        }
+      else
+        {
+          addr = NULL;
+          addrsize = 0;
+        }
+
+      directly_connected = af_is_ipv4 &&
+        ospf6_route_directly_connected (p, &route->nexthop[i]);
+
+      if (directly_connected || addr == NULL)
+        {
+          assert (route->nexthop[i].ifindex != 0);
+
+	  if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+	    {
+	      zlog_debug ("  nexthop: %s(%u)",
+                          ifindex2ifname (route->nexthop[i].ifindex),
+			  route->nexthop[i].ifindex);
+	    }
+
+          stream_putc (s, ZEBRA_NEXTHOP_IFINDEX);
+          stream_putl (s, route->nexthop[i].ifindex);
+        }
+      else if (route->nexthop[i].ifindex != 0)
+        {
+          assert (addr != NULL);
+
+	  if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+	    {
+              char buf[INET6_ADDRSTRLEN];
+
+	      ospf6_addr2str (ospf6, &route->nexthop[i].address,
+			      buf, sizeof (buf));
+	      zlog_debug ("  nexthop: %s%%%s(%u)", buf,
+                          ifindex2ifname (route->nexthop[i].ifindex),
+			  route->nexthop[i].ifindex);
+	    }
+
+          if (af_is_ipv4)
+            stream_putc (s, ZEBRA_NEXTHOP_IPV4_IFINDEX);
+          else
+            stream_putc (s, ZEBRA_NEXTHOP_IPV6_IFINDEX);
+
+          stream_write (s, addr, addrsize);
+          stream_putl (s, route->nexthop[i].ifindex);
+        }
+      else
+        {
+          assert (addr != NULL);
+
+	  if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+	    {
+              char buf[INET6_ADDRSTRLEN];
+
+	      ospf6_addr2str (ospf6, &route->nexthop[i].address,
+			      buf, sizeof (buf));
+	      zlog_debug ("  nexthop: %s", buf);
+	    }
+
+          if (af_is_ipv4)
+            stream_putc (s, ZEBRA_NEXTHOP_IPV4);
+          else
+            stream_putc (s, ZEBRA_NEXTHOP_IPV6);
+
+          stream_write (s, addr, addrsize);
+        }
+    }
+
+#if 0
+  if (CHECK_FLAG (message, ZAPI_MESSAGE_DISTANCE))
+    stream_putc (s, distance);
+#endif
+
+  if (CHECK_FLAG (message, ZAPI_MESSAGE_METRIC))
+    {
+      u_int32_t metric;
+
+      if (route->path.metric_type == 2)
+        metric = route->path.cost_e2;
+      else
+        metric = route->path.cost;
+
+      if (IS_OSPF6_DEBUG_ZEBRA (SEND))
+        zlog_debug ("  metric: %u", metric);
+
+      stream_putl (s, metric);
+    }
+
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  zclient_send_message (zclient);
+}
+
+static void
+ospf6_zebra_route_update (ospf6_zebra_route_update_t update,
+                          struct ospf6_route *request)
+{
+  assert (update == ROUTE_ADD || update == ROUTE_REMOVE);
 
   if (IS_OSPF6_DEBUG_ZEBRA (SEND))
     {
+      char buf[PREFIXSTRLEN];
+
       ospf6_prefix2str (ospf6, &request->prefix, buf, sizeof (buf));
       zlog_debug ("Send %s route: %s",
-		  (type == REM ? "remove" : "add"), buf);
+		  (update == ROUTE_REMOVE ? "remove" : "add"), buf);
     }
 
   if (zclient->sock < 0)
@@ -446,12 +681,12 @@ ospf6_zebra_route_update (int type, struct ospf6_route *request)
 
   /* If removing is the best path and if there's another path,
      treat this request as add the secondary path */
-  if (type == REM && ospf6_route_is_best (request) &&
+  if (update == ROUTE_REMOVE && ospf6_route_is_best (request) &&
       request->next && ospf6_route_is_same (request, request->next))
     {
       if (IS_OSPF6_DEBUG_ZEBRA (SEND))
         zlog_debug ("  Best-path removal resulted Secondary addition");
-      type = ADD;
+      update = ROUTE_ADD;
       request = request->next;
     }
 
@@ -464,222 +699,19 @@ ospf6_zebra_route_update (int type, struct ospf6_route *request)
       return;
     }
 
-  nhcount = 0;
-  for (i = 0; i < OSPF6_MULTI_PATH_LIMIT; i++)
-    if (ospf6_nexthop_is_set (&request->nexthop[i]))
-      {
-	nhcount++;
-        if (request->nexthop[i].directly_connected)
-          ifcount++;
-      }
-
-  if (nhcount == 0)
-    {
-      if (IS_OSPF6_DEBUG_ZEBRA (SEND))
-        zlog_debug ("  No nexthop, ignore");
-      return;
-    }
-
-  if (ospf6_af_is_ipv4 (ospf6))
-    {
-      struct zapi_ipv4 api_ipv4;
-      struct prefix_ipv4 dest_ipv4;
-      struct in_addr _nexthop_addr[OSPF6_MULTI_PATH_LIMIT];
-      struct in_addr **nexthops_ipv4 = NULL;
-      int j = 0, k = 0;
-      int err;
-
-      nhcount = nhcount - ifcount;
-
-      /* allocate memory for nexthop_list */
-      if (nhcount)
-        {
-          nexthops_ipv4 = XCALLOC (MTYPE_OSPF6_OTHER,
-                                   nhcount * sizeof (struct in4_addr *));
-          if (nexthops_ipv4 == NULL)
-            {
-              zlog_warn ("Can't send route to zebra: malloc failed");
-              return;
-            }
-        }
-
-      /* allocate memory for ifindex_list */
-      if (ifcount)
-        {
-          ifindexes = XCALLOC (MTYPE_OSPF6_OTHER,
-                               ifcount * sizeof (unsigned int));
-          if (ifindexes == NULL)
-            {
-              zlog_warn ("Can't send route to zebra: malloc failed");
-              if (nhcount)
-                XFREE (MTYPE_OSPF6_OTHER, nexthops_ipv4);
-              return;
-            }
-        }
-
-      api_ipv4.type = ZEBRA_ROUTE_OSPF6;
-      api_ipv4.flags = 0;
-      api_ipv4.message = 0;
-      api_ipv4.safi = SAFI_UNICAST;
-      SET_FLAG (api_ipv4.message, ZAPI_MESSAGE_NEXTHOP);
-
-      api_ipv4.nexthop_num = nhcount;
-      api_ipv4.nexthop = nexthops_ipv4;
-      api_ipv4.ifindex_num = ifcount;
-
-      SET_FLAG (api_ipv4.message, ZAPI_MESSAGE_DISTANCE);
-      api_ipv4.distance = 0;
-      SET_FLAG (api_ipv4.message, ZAPI_MESSAGE_METRIC);
-      api_ipv4.metric = (request->path.metric_type == 2 ?
-                         request->path.cost_e2 : request->path.cost);
-
-      for (i = 0; i < nhcount + ifcount; i++)
-        {
-          if (request->nexthop[i].directly_connected)
-            {
-              //since the path is directly connected just use the interface as
-              //the nexthop
-              ifindexes[j++] = request->nexthop[i].ifindex;
-              SET_FLAG (api_ipv4.message, ZAPI_MESSAGE_IFINDEX);
-              api_ipv4.ifindex = ifindexes;
-            }
-          else
-            {
-              //nexthop is not directly connected
-	      err = ospf6_af_address_convert6to4 (&_nexthop_addr[k],
-						  &request->nexthop[i].address);
-	      if (err)
-	        {
-		  char buf[INET6_ADDRSTRLEN];
-
-		  ospf6_addr2str6 (&request->nexthop[i].address,
-				   buf, sizeof (buf));
-		  zlog_warn ("%s: error converting nexthop address: %s",
-			     __func__, buf);
-		  continue;
-		}
-	      nexthops_ipv4[k] = &_nexthop_addr[k];
-	      k++;
-            }
-        }
-
-      //convert IPv6 dest to IPv4
-      err = ospf6_af_prefix_convert6to4 (&dest_ipv4,
-					 (struct prefix_ipv6 *)&request->prefix);
-      if (err)
-        {
-	  char buf[PREFIXSTRLEN];
-
-	  prefix2str (&request->prefix, buf, sizeof(buf));
-	  zlog_warn ("%s: error converting destination prefix: %s",
-		     __func__, buf);
-
-          /* something's wrong so just give up */
-          if (nhcount)
-            XFREE (MTYPE_OSPF6_OTHER, nexthops_ipv4);
-          if (ifcount)
-            XFREE (MTYPE_OSPF6_OTHER, ifindexes);
-          return;
-        }
-
-      if (CHECK_FLAG (api_ipv4.message, ZAPI_MESSAGE_DISTANCE))
-        api_ipv4.distance = 0;
-      if (CHECK_FLAG (api_ipv4.message, ZAPI_MESSAGE_METRIC))
-        {
-          api_ipv4.metric = (request->path.metric_type == 2 ?
-                             request->path.cost_e2 : request->path.cost);
-        }
-
-      if (type == REM)
-        zapi_ipv4_route (ZEBRA_IPV4_ROUTE_DELETE, zclient,
-			 &dest_ipv4, &api_ipv4);
-      else
-        zapi_ipv4_route (ZEBRA_IPV4_ROUTE_ADD, zclient,
-			 &dest_ipv4, &api_ipv4);
-
-      if (nhcount)
-        XFREE (MTYPE_OSPF6_OTHER, nexthops_ipv4);
-      if (ifcount)
-        XFREE (MTYPE_OSPF6_OTHER, ifindexes);
-    }
-  else
-    {
-      struct zapi_ipv6 api;
-      struct prefix_ipv6 *dest;
-      struct in6_addr **nexthops;
-
-      /* allocate memory for nexthop_list */
-      nexthops = XCALLOC (MTYPE_OSPF6_OTHER,
-			  nhcount * sizeof (struct in6_addr *));
-      if (nexthops == NULL)
-	{
-	  zlog_warn ("Can't send route to zebra: malloc failed");
-	  return;
-	}
-
-      /* allocate memory for ifindex_list */
-      ifindexes = XCALLOC (MTYPE_OSPF6_OTHER,
-			   nhcount * sizeof (unsigned int));
-      if (ifindexes == NULL)
-	{
-	  zlog_warn ("Can't send route to zebra: malloc failed");
-	  XFREE (MTYPE_OSPF6_OTHER, nexthops);
-	  return;
-	}
-
-      for (i = 0; i < nhcount; i++)
-	{
-	  if (IS_OSPF6_DEBUG_ZEBRA (SEND))
-	    {
-	      char ifname[IFNAMSIZ];
-	      ospf6_addr2str (ospf6, &request->nexthop[i].address,
-			      buf, sizeof (buf));
-	      if (!if_indextoname(request->nexthop[i].ifindex, ifname))
-		strlcpy(ifname, "unknown", sizeof(ifname));
-	      zlog_debug ("  nexthop: %s%%%.*s(%d)", buf, IFNAMSIZ, ifname,
-			  request->nexthop[i].ifindex);
-	    }
-	  nexthops[i] = &request->nexthop[i].address;
-	  ifindexes[i] = request->nexthop[i].ifindex;
-	}
-
-      api.type = ZEBRA_ROUTE_OSPF6;
-      api.flags = 0;
-      api.message = 0;
-      api.safi = SAFI_UNICAST;
-      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
-      api.nexthop_num = nhcount;
-      api.nexthop = nexthops;
-      SET_FLAG (api.message, ZAPI_MESSAGE_IFINDEX);
-      api.ifindex_num = nhcount;
-      api.ifindex = ifindexes;
-      SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
-      api.metric = (request->path.metric_type == 2 ?
-		    request->path.cost_e2 : request->path.cost);
-
-      dest = (struct prefix_ipv6 *) &request->prefix;
-      if (type == REM)
-	zapi_ipv6_route (ZEBRA_IPV6_ROUTE_DELETE, zclient, dest, &api);
-      else
-	zapi_ipv6_route (ZEBRA_IPV6_ROUTE_ADD, zclient, dest, &api);
-
-      XFREE (MTYPE_OSPF6_OTHER, nexthops);
-      XFREE (MTYPE_OSPF6_OTHER, ifindexes);
-    }
-
-  return;
+  __ospf6_zebra_route_update (update, request);
 }
 
 void
 ospf6_zebra_route_update_add (struct ospf6_route *request)
 {
-  ospf6_zebra_route_update (ADD, request);
+  ospf6_zebra_route_update (ROUTE_ADD, request);
 }
 
 void
 ospf6_zebra_route_update_remove (struct ospf6_route *request)
 {
-  ospf6_zebra_route_update (REM, request);
+  ospf6_zebra_route_update (ROUTE_REMOVE, request);
 }
 
 void

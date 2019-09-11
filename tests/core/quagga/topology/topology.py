@@ -35,7 +35,9 @@ class Topology(object):
         self.session = pycore.Session()
         self.n = []
         for i in xrange(numnodes):
-            n = self.session.addobj(cls = nodecls, name = 'n%s' % (i + 1))
+            nodeid = i + 1
+            n = self.session.addobj(cls = nodecls,
+                                    name = 'n%s' % nodeid, nodeid = nodeid)
             self.n.append(n)
 
     def shutdown(self):

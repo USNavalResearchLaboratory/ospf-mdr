@@ -118,7 +118,7 @@ extern struct thread_master *master;
 extern struct route_node *route_prev (struct route_node *node);
 
 extern void ospf6_debug (void);
-extern void ospf6_init (void);
+extern int ospf6_init (void);
 
 long elapsed_sec (struct timeval *t);
 long elapsed_msec (struct timeval *t);

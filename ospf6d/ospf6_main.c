@@ -234,6 +234,7 @@ main (int argc, char *argv[], char *envp[])
   char *config_file = NULL;
   struct thread thread;
   int dryrun = 0;
+  int err;
 
   /* Set umask before anything for security */
   umask (0027);
@@ -327,7 +328,12 @@ main (int argc, char *argv[], char *envp[])
   prefix_list_init ();
 
   /* initialize ospf6 */
-  ospf6_init ();
+  err = ospf6_init ();
+  if (err)
+    {
+      zlog_err ("OSPF6d initialization failed: %s", strerror (errno));
+      exit (1);
+    }
 
   /* sort command vector */
   sort_node ();

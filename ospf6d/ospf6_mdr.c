@@ -927,7 +927,7 @@ ospf6_mdr_update_lsa (struct ospf6_interface *oi)
     }
 
   if (originate)
-    OSPF6_ROUTER_LSA_SCHEDULE (oi->area);
+    ospf6_router_lsa_schedule (oi->area);
   // Run SPF if the set of routable neighbors changed.
   if (change)
     ospf6_spf_schedule (oi->area);

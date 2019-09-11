@@ -186,7 +186,8 @@ ospf6_asbr_lsa_add (struct ospf6_lsa *lsa)
   ospf6_prefix_in6_addr (&prefix, &external->prefix);
 
   /* check prefix address family */
-  if (ospf6_af_validate_prefix (ospf6, &prefix, external->prefix.prefix_length))
+  if (ospf6_af_validate_prefix (ospf6, &prefix,
+                                external->prefix.prefix_length, true))
     {
       char buf[INET6_ADDRSTRLEN];
 
@@ -279,7 +280,8 @@ ospf6_asbr_lsa_remove (struct ospf6_lsa *lsa)
   ospf6_prefix_in6_addr (&prefix.u.prefix6, &external->prefix);
 
   /* check prefix address family */
-  if (ospf6_af_validate_prefix (ospf6, &prefix.u.prefix6, prefix.prefixlen))
+  if (ospf6_af_validate_prefix (ospf6, &prefix.u.prefix6,
+                                prefix.prefixlen, true))
     {
       char buf[PREFIXSTRLEN];
 
@@ -569,7 +571,8 @@ ospf6_asbr_redistribute_add (int type, int ifindex, struct prefix *prefix,
     return;
 
   /* check prefix address family */
-  if (ospf6_af_validate_prefix (ospf6, &prefix->u.prefix6, prefix->prefixlen))
+  if (ospf6_af_validate_prefix (ospf6, &prefix->u.prefix6,
+                                prefix->prefixlen, true))
     {
       char buf[PREFIXSTRLEN];
 
@@ -716,7 +719,7 @@ ospf6_asbr_redistribute_add (int type, int ifindex, struct prefix *prefix,
 
   /* Router-Bit (ASBR Flag) may have to be updated */
   for (ALL_LIST_ELEMENTS (ospf6->area_list, lnode, lnnode, oa))
-    OSPF6_ROUTER_LSA_SCHEDULE (oa);
+    ospf6_router_lsa_schedule (oa);
 }
 
 void
@@ -732,7 +735,8 @@ ospf6_asbr_redistribute_remove (int type, int ifindex, struct prefix *prefix)
   struct ospf6_area *oa;
 
   /* check prefix address family */
-  if (ospf6_af_validate_prefix (ospf6, &prefix->u.prefix6, prefix->prefixlen))
+  if (ospf6_af_validate_prefix (ospf6, &prefix->u.prefix6,
+                                prefix->prefixlen, true))
     {
       if (IS_OSPF6_DEBUG_ASBR)
 	{
@@ -798,7 +802,7 @@ ospf6_asbr_redistribute_remove (int type, int ifindex, struct prefix *prefix)
 
   /* Router-Bit (ASBR Flag) may have to be updated */
   for (ALL_LIST_ELEMENTS (ospf6->area_list, lnode, lnnode, oa))
-    OSPF6_ROUTER_LSA_SCHEDULE (oa);
+    ospf6_router_lsa_schedule (oa);
 }
 
 void

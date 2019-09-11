@@ -1786,19 +1786,32 @@ write_config_integrated(void)
   int ret;
   char line[] = "write terminal\n";
   FILE *fp;
-  char *integrate_sav = NULL;
+  char buf[PATH_MAX];
+  char *integrate;
+  char integrate_sav[PATH_MAX];
 
-  integrate_sav = malloc (strlen (integrate_default) +
-			  strlen (CONF_BACKUP_EXT) + 1);
-  strcpy (integrate_sav, integrate_default);
+  ret = readlink (integrate_default, buf, sizeof (buf));
+  if (ret > 0)
+    {
+      assert (ret < sizeof (buf));
+      buf[ret] = '\0';
+      integrate = buf;
+    }
+  else
+    {
+      integrate = integrate_default;
+    }
+
+  assert (strlen (integrate) + strlen (CONF_BACKUP_EXT) <
+          sizeof (integrate_sav));
+  strcpy (integrate_sav, integrate);
   strcat (integrate_sav, CONF_BACKUP_EXT);
 
   fprintf (stdout,"Building Configuration...\n");
 
   /* Move current configuration file to backup config file. */
   unlink (integrate_sav);
-  rename (integrate_default, integrate_sav);
-  free (integrate_sav);
+  rename (integrate, integrate_sav);
  
   fp = fopen (integrate_default, "w");
   if (fp == NULL)

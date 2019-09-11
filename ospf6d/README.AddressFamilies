@@ -1,0 +1,73 @@
+The folowoing text describes the implementation of a mechanism for supporting 
+multiple address families in OSPFv3 using multiple instances.  It 
+maps an address family (AF) to an OSPFv3 instance using the Instance ID 
+field in the OSPFv3 packet header.  This approach is fairly simple 
+and minimizes extensions to OSPFv3 for supporting multiple AFs.
+
+IETF DRAFT VERSION SUPPORTED
+Support of Address Families (AF) in OSPFv3 is supported according to 
+draft-ietf-ospf-af-alt-05.txt.
+
+
+HOW TO ENABLE ADDRESS FAMILIES
+Address families is enabled by compiling the flag OSPF6_AF into the source code.
+By default this flag is compiled into the code.  It must be removed from 
+configure.ac and config.h.in. 
+
+
+HOW TO CONFIGURE ADDRESS FAMILIES
+Address Families can be configured in one of two ways.
+
+1.  Add the following lines to the ospf6d.conf file
+  interface <ifname>
+  ipv6 ospf6 instance-id <0-255>
+
+2.  From the vtysh or telnet terminal type:
+  > conf t
+  > interface <ifname>
+  > ipv6 ospf6 instance-id <0-255>
+  > exit
+  > exit
+
+The value of the instance ID should one of the four ranges below.  The most 
+comman ranges are 0 to 31 for unicast IPv6 routing (standard OSPFv3) and  
+64 to 95 for IPv4 unicast routing.
+      Instance ID # 0    -  # 31     IPv6 unicast AF
+      Instance ID # 32   -  # 63     IPv6 multicast AF
+      Instance ID # 64   -  # 95     IPv4 unicast AF
+      Instance ID # 96   -  # 127    IPv4 multicast AF
+      Instance ID # 128  -  # 255    Unassigned
+
+NOTE:  The instance-id must be the same on all interfaces.  Different Address
+Families cannot be used within the same ospf6d process.  The router will
+fail if different ranges are used.
+
+
+HOW TO VERIFY ROUTING IS WORKING
+From a vtysh or telnet terminal type:
+
+> show ipv6 ospf6 route
+
+This should display the OSPFv3 routes.  If IPv4 AFs are used then the 
+route will appear as an IPv6 route with zeros before the IPv4 route.
+Next, type the following command for IPv4 or IPv6 
+
+> show ip route
+> show ipv6 route
+
+The entries with the "*" are going to be installed in the kernel routing
+table.  If these tables are correct then the kernel routing table 
+should be correct.  
+
+
+SOURCE CODE INFORMATION
+All modified code is found in the directories lib/, zebra/, and ospf6/.  
+Each modification is flagged with the tag "OSPF6_AF".
+
+
+POSSIBLE FUTURE WORK
+Enable different AFs to run in the same ospf6d instance.  This would require
+a IETF draft changes and a sepeartion of LSAs within the database.
+
+Known Issues
+-If instance IDs are not consistent on the interfaces then routing will fail. 

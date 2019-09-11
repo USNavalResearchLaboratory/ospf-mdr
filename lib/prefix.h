@@ -194,8 +194,11 @@ extern void masklen2ip6 (const int, struct in6_addr *);
 extern void str2in6_addr (const char *, struct in6_addr *);
 extern const char *inet6_ntoa (struct in6_addr);
 
+extern int prefix_ipv6_default (const struct prefix_ipv6 *);
 #endif /* HAVE_IPV6 */
 
 extern int all_digit (const char *);
+
+extern int prefix_default (const struct prefix *);
 
 #endif /* _ZEBRA_PREFIX_H */
