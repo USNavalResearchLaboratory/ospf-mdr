@@ -21,7 +21,7 @@ libospf6_a_SOURCES = \
 	ospf6_mdr_smf.c ospf6_sdt.c ospf6_private_data.c ospf6_callbacks.c \
 	ospf6_interface_neighbor_metric.c ospf6_interface_metricfunction.c \
 	ospf6_zebra_linkmetrics.c ospf6_interface_linkmetrics.c \
-	ospf6_interface_neighborcost.c
+	ospf6_interface_neighborcost.c ospf6_interface_linkstatus.c
 
 noinst_HEADERS = \
 	ospf6_network.h ospf6_message.h ospf6_lsa.h ospf6_lsdb.h \

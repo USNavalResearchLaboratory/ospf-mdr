@@ -37,46 +37,66 @@
 #include "zebra_linkmetrics.h"
 #include "lmgenl.h"
 
-static struct list ospf6_linkmetrics_hooks;
-static struct list ospf6_linkstatus_hooks;
+static struct list *ospf6_linkmetrics_hooks;
+static struct list *ospf6_linkstatus_hooks;
+
+static void __attribute__((constructor))
+ospf6_zebra_linkmetrics_init (void)
+{
+  assert (ospf6_linkmetrics_hooks == NULL);
+  ospf6_linkmetrics_hooks = list_new ();
+
+  assert (ospf6_linkstatus_hooks == NULL);
+  ospf6_linkstatus_hooks = list_new ();
+}
+
+static void __attribute__((destructor))
+ospf6_zebra_linkmetrics_terminate (void)
+{
+  list_delete (ospf6_linkmetrics_hooks);
+  ospf6_linkmetrics_hooks = NULL;
+
+  list_delete (ospf6_linkstatus_hooks);
+  ospf6_linkstatus_hooks = NULL;
+}
 
 static void
 ospf6_run_linkmetrics_hooks (struct ospf6_neighbor *on,
-			     zebra_linkmetrics_t *linkmetrics)
+                             struct zebra_linkmetrics *metrics)
 {
-  RUN_HOOKS(&ospf6_linkmetrics_hooks, linkmetrics_hook_t, on, linkmetrics);
+  RUN_HOOKS (ospf6_linkmetrics_hooks, linkmetrics_hook_t, on, metrics);
 }
 
 static void
 ospf6_run_linkstatus_hooks (struct ospf6_interface *oi,
 			    struct ospf6_neighbor *on,
-			    zebra_linkstatus_t *linkstatus)
+                            struct zebra_linkstatus *status)
 {
-  RUN_HOOKS(&ospf6_linkstatus_hooks, linkstatus_hook_t, oi, on, linkstatus);
+  RUN_HOOKS (ospf6_linkstatus_hooks, linkstatus_hook_t, oi, on, status);
 }
 
 int
 ospf6_add_linkmetrics_hook (linkmetrics_hook_t hook)
 {
-  return ospf6_add_hook (&ospf6_linkmetrics_hooks, hook);
+  return ospf6_add_hook (ospf6_linkmetrics_hooks, hook);
 }
 
 int
 ospf6_add_linkstatus_hook (linkstatus_hook_t hook)
 {
-  return ospf6_add_hook (&ospf6_linkstatus_hooks, hook);
+  return ospf6_add_hook (ospf6_linkstatus_hooks, hook);
 }
 
 int
 ospf6_remove_linkmetrics_hook (linkmetrics_hook_t hook)
 {
-  return ospf6_remove_hook (&ospf6_linkmetrics_hooks, hook);
+  return ospf6_remove_hook (ospf6_linkmetrics_hooks, hook);
 }
 
 int
 ospf6_remove_linkstatus_hook (linkstatus_hook_t hook)
 {
-  return ospf6_remove_hook (&ospf6_linkstatus_hooks, hook);
+  return ospf6_remove_hook (ospf6_linkstatus_hooks, hook);
 }
 
 void
@@ -94,10 +114,15 @@ static struct ospf6_neighbor *
 ospf6_neighbor_lookup_by_ifaddr (struct in6_addr *linklocal_addr,
                                  struct ospf6_interface *oi)
 {
-  struct listnode *n;
   struct ospf6_neighbor *on;
+  bool addr_unspecified;
+  bool addr_linklocal;
 
-  if (!IN6_IS_ADDR_LINKLOCAL (linklocal_addr))
+  addr_unspecified = IN6_IS_ADDR_UNSPECIFIED (linklocal_addr);
+  addr_linklocal =
+    !addr_unspecified && IN6_IS_ADDR_LINKLOCAL (linklocal_addr);
+
+  if (!addr_unspecified && !addr_linklocal)
     {
       char buf[INET6_ADDRSTRLEN];
       ospf6_addr2str6 (linklocal_addr, buf, sizeof (buf));
@@ -105,16 +130,23 @@ ospf6_neighbor_lookup_by_ifaddr (struct in6_addr *linklocal_addr,
       return NULL;
     }
 
-  for (ALL_LIST_ELEMENTS_RO (oi->neighbor_list, n, on))
-    if (IN6_ARE_ADDR_EQUAL (&on->linklocal_addr, linklocal_addr))
-      return on;
-
-  if (conf_debug_ospf6_neighbor)
+  if (oi->type == OSPF6_IFTYPE_POINTOPOINT &&
+      listcount (oi->neighbor_list) == 1)
     {
-      char buf[INET6_ADDRSTRLEN];
-      ospf6_addr2str6 (linklocal_addr, buf, sizeof (buf));
-      zlog_debug ("%s: no neighbor found for link-local address %s",
-		  __func__, buf);
+      on = listgetdata (listhead (oi->neighbor_list));
+      if (addr_unspecified ||
+          IN6_ARE_ADDR_EQUAL (&on->linklocal_addr, linklocal_addr))
+        return on;
+    }
+  else if (!addr_unspecified)
+    {
+      struct listnode *n;
+
+      for (ALL_LIST_ELEMENTS_RO (oi->neighbor_list, n, on))
+        {
+          if (IN6_ARE_ADDR_EQUAL (&on->linklocal_addr, linklocal_addr))
+            return on;
+        }
     }
 
   return NULL;
@@ -124,13 +156,13 @@ int
 ospf6_zebra_linkmetrics (int command, struct zclient *zclient,
 			 zebra_size_t length)
 {
-  zebra_linkmetrics_t linkmetrics;
+  struct zebra_linkmetrics metrics;
   struct ospf6_interface *oi;
   struct ospf6_neighbor *on;
 
   assert (command == ZEBRA_LINKMETRICS_METRICS);
 
-  if (zapi_read_linkmetrics (&linkmetrics, zclient->ibuf, length))
+  if (zapi_read_linkmetrics (&metrics, zclient->ibuf, length))
     {
       zlog_err ("%s: zapi_read_linkmetrics() failed", __func__);
       return -1;
@@ -139,45 +171,33 @@ ospf6_zebra_linkmetrics (int command, struct zclient *zclient,
   if (IS_OSPF6_DEBUG_ZEBRA (RECV))
     {
       zlog_debug ("%s: received link metrics update", __func__);
-      zebra_linkmetrics_logdebug (&linkmetrics);
+      zebra_linkmetrics_logdebug (&metrics);
     }
 
-  oi = ospf6_interface_lookup_by_ifindex (linkmetrics.ifindex);
+  oi = ospf6_interface_lookup_by_ifindex (metrics.ifindex);
   if (oi == NULL)
     {
       zlog_err ("%s: unknown interface index: %d",
-		__func__, linkmetrics.ifindex);
+		__func__, metrics.ifindex);
       return -1;
     }
 
-  if (!IN6_IS_ADDR_LINKLOCAL (&linkmetrics.linklocal_addr))
-    {
-      if (IS_OSPF6_DEBUG_ZEBRA (RECV))
-        {
-          char lladdrstr[INET6_ADDRSTRLEN];
-          ospf6_addr2str6 (&linkmetrics.linklocal_addr,
-                           lladdrstr, sizeof (lladdrstr));
-          zlog_err ("%s: non-link-local neighbor address: %s",
-                    __func__, lladdrstr);
-        }
-      return -1;
-    }
-
-  on = ospf6_neighbor_lookup_by_ifaddr (&linkmetrics.linklocal_addr, oi);
+  on = ospf6_neighbor_lookup_by_ifaddr (&metrics.nbr_addr6, oi);
   if (on == NULL)
     {
       if (IS_OSPF6_DEBUG_ZEBRA (RECV))
 	{
 	  char lladdrstr[INET6_ADDRSTRLEN];
-	  ospf6_addr2str6 (&linkmetrics.linklocal_addr,
+	  ospf6_addr2str6 (&metrics.nbr_addr6,
 			   lladdrstr, sizeof (lladdrstr));
-	  zlog_err ("%s: neighbor not found for ipv6 link-local address %s",
-		    __func__, lladdrstr);
+          zlog_debug ("%s: neighbor %s not found for link metrics update "
+                      "on interface %s",
+                      __func__, lladdrstr, oi->interface->name);
 	}
       return -1;
     }
 
-  ospf6_zebra_update_linkmetrics (on, &linkmetrics);
+  ospf6_zebra_update_linkmetrics (on, &metrics);
 
   return 0;
 }
@@ -186,62 +206,47 @@ int
 ospf6_zebra_linkstatus (int command, struct zclient *zclient,
 			zebra_size_t length)
 {
-  zebra_linkstatus_t linkstatus;
+  struct zebra_linkstatus status;
   struct ospf6_interface *oi;
   struct ospf6_neighbor *on;
 
   assert (command == ZEBRA_LINKMETRICS_STATUS);
 
-  if (zapi_read_linkstatus (&linkstatus, zclient->ibuf, length))
+  if (zapi_read_linkstatus (&status, zclient->ibuf, length))
     {
-      zlog_err ("%s: zapi_read_linkmetrics() failed", __func__);
+      zlog_err ("%s: zapi_read_linkstatus() failed", __func__);
       return -1;
     }
 
   if (IS_OSPF6_DEBUG_ZEBRA (RECV))
     {
       zlog_debug ("%s: received link status update", __func__);
-      zebra_linkstatus_logdebug (&linkstatus);
+      zebra_linkstatus_logdebug (&status);
     }
 
-  oi = ospf6_interface_lookup_by_ifindex (linkstatus.ifindex);
+  oi = ospf6_interface_lookup_by_ifindex (status.ifindex);
   if (oi == NULL)
     {
       zlog_err ("%s: unknown interface index: %d",
-		__func__, linkstatus.ifindex);
+		__func__, status.ifindex);
       return -1;
     }
 
-  if (!IN6_IS_ADDR_LINKLOCAL (&linkstatus.linklocal_addr))
+  /* neighbor can be unknown only for STATUS_UP events */
+  on = ospf6_neighbor_lookup_by_ifaddr (&status.nbr_addr6, oi);
+  if (on == NULL && status.status != LM_STATUS_UP)
     {
-      if (IS_OSPF6_DEBUG_ZEBRA (RECV))
-        {
-          char lladdrstr[INET6_ADDRSTRLEN];
-          ospf6_addr2str6 (&linkstatus.linklocal_addr,
-                           lladdrstr, sizeof (lladdrstr));
-          zlog_err ("%s: non-link-local neighbor address: %s",
-                    __func__, lladdrstr);
-        }
+      char lladdrstr[INET6_ADDRSTRLEN];
+
+      ospf6_addr2str6 (&status.nbr_addr6,
+                       lladdrstr, sizeof (lladdrstr));
+      zlog_debug ("%s: neighbor %s not found for link status %s update "
+                  "on interface %s", __func__, lladdrstr,
+                  status.status ? "up" : "down",  oi->interface->name);
       return -1;
     }
 
-  /* neighbor can be unknown only for LINKMETRICS_STATUS_UP events */
-  on = ospf6_neighbor_lookup_by_ifaddr (&linkstatus.linklocal_addr, oi);
-  if (on == NULL && linkstatus.status != LM_STATUS_UP)
-    {
-      char statusstr[40], lladdrstr[INET6_ADDRSTRLEN];
-
-      zebra_linkstatus_string (statusstr, sizeof (statusstr),
-			       linkstatus.status);
-      ospf6_addr2str6 (&linkstatus.linklocal_addr,
-		       lladdrstr, sizeof (lladdrstr));
-      zlog_debug ("%s: neighbor not found for link status update "
-		  "on interface %s from %s: %s",
-		  __func__, oi->interface->name, lladdrstr, statusstr);
-      return -1;
-    }
-
-  ospf6_run_linkstatus_hooks (oi, on, &linkstatus);
+  ospf6_run_linkstatus_hooks (oi, on, &status);
 
   return 0;
 }

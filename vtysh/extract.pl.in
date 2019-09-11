@@ -41,6 +41,12 @@ $ignore{'"router babel"'} = "ignore";
 $ignore{'"router bgp " "<1-4294967295>"'} = "ignore";
 $ignore{'"router bgp " "<1-4294967295>" " view WORD"'} = "ignore";
 $ignore{'"router isis WORD"'} = "ignore";
+$ignore{'"router mfea"'} = "ignore";
+$ignore{'"router mfea6"'} = "ignore";
+$ignore{'"router igmp"'} = "ignore";
+$ignore{'"router mld6"'} = "ignore";
+$ignore{'"router pim"'} = "ignore";
+$ignore{'"router pim6"'} = "ignore";
 $ignore{'"router zebra"'} = "ignore";
 $ignore{'"address-family ipv4"'} = "ignore";
 $ignore{'"address-family ipv4 (unicast|multicast)"'} = "ignore";
@@ -63,13 +69,13 @@ $ignore{'"show history"'} = "ignore";
 foreach (@ARGV) {
     $file = $_;
 
-    open (FH, "cpp -DHAVE_CONFIG_H -DVTYSH_EXTRACT_PL -DHAVE_IPV6 -I@top_builddir@ -I@srcdir@/ -I@srcdir@/.. -I@top_srcdir@/lib -I@top_srcdir@/isisd/topology @SNMP_INCLUDES@ @CPPFLAGS@ $file |");
+    open (FH, "cpp -DHAVE_CONFIG_H -DVTYSH_EXTRACT_PL -DHAVE_IPV6 -DHAVE_IPV6_MULTICAST -I@top_builddir@ -I@srcdir@/ -I@srcdir@/.. -I@top_srcdir@/lib -I@top_srcdir@/isisd/topology -I@top_srcdir@/xpimd/xorp @SNMP_INCLUDES@ @CPPFLAGS@ $file |");
     local $/; undef $/;
     $line = <FH>;
     close (FH);
 
     @defun = ($line =~ /(?:DEFUN|ALIAS)(?:_DEPRECATED)?\s*\((.+?)\);?\s?\s?\n/sg);
-    @install = ($line =~ /install_element\s*\(\s*[0-9A-Z_]+,\s*&[^;]*;\s*\n/sg);
+    @install = ($line =~ /install_element\s*\(\s*[0-9A-Z_]+,\s*&[^;]*;\s*\n?/sg);
 
     # DEFUN process
     foreach (@defun) {
@@ -125,7 +131,7 @@ foreach (@ARGV) {
 	      $protocol = "VTYSH_ALL";
 	   }
         } else {
-           ($protocol) = ($file =~ /^.*\/([a-z0-9]+)\/[a-zA-Z0-9_\-]+\.c$/);
+           ($protocol) = ($file =~ /^.*\/([a-z0-9]+)\/[a-zA-Z0-9_\-]+\.cc?$/);
            $protocol = "VTYSH_" . uc $protocol;
         }
 

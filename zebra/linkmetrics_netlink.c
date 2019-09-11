@@ -21,15 +21,19 @@
 
 #include "zebra.h"
 
-#if !defined(HAVE_LIBNLGENL)
-int linkmetrics_netlink_init (int mcgroup)
+#ifndef HAVE_LIBNLGENL
+
+int
+linkmetrics_netlink_init (int mcgroup)
 {
   return 0;
 }
 
-void linkmetrics_netlink_close (void)
+void
+linkmetrics_netlink_close (void)
 {
 }
+
 #else  /* HAVE_LIBNLGENL */
 /*
  * This file contains all the functions needed to communicate with the PPP
@@ -81,19 +85,13 @@ static struct nla_policy lmgenl_policy[LMGENL_ATTR_MAX + 1] = {
 	[LMGENL_ATTR_PADQ_LATENCY] = {.type = NLA_U16},
 	[LMGENL_ATTR_PADQ_CDR] = {.type = NLA_U16},
 	[LMGENL_ATTR_PADQ_MDR] = {.type = NLA_U16},
+	[LMGENL_ATTR_PADQ_RESERVED1] = {.type = NLA_U8},
+	[LMGENL_ATTR_PADQ_RESERVED2] = {.type = NLA_U8},
 };
 
 /* Local Function prototypes */
-static int lmgenl_open (lmsock_t *lmsock, const char *genlfamily,
-                        const char *genlgroup);
-static int lmgenl_open_recv (lmsock_t *lmsock, const char *genlfamily,
-                             const char *genlgroup);
 static void lmgenl_close (lmsock_t *lmsock);
-static int lmgenl_recv_status (struct nlmsghdr *nlh);
-static int lmgenl_recv_padq (struct nlmsghdr *nlh);
-static int lmgenl_recv (struct nl_sock *sk);
-static int lmgenl_read (struct thread *thread);
-static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg);
+static int __lmgenl_recv (struct nl_msg *msg, void *arg);
 
 /*
  * Function: lmgenl_open()
@@ -211,6 +209,16 @@ lmgenl_open_recv (lmsock_t *lmsock, const char *genlfamily,
       return err;
     }
 
+  err = nl_socket_modify_cb (lmsock->sk, NL_CB_VALID, NL_CB_CUSTOM,
+                             __lmgenl_recv, NULL);
+  if (err)
+    {
+      zlog_err ("%s: nl_socket_modify_cb() failed: %s",
+		__func__, nl_geterror (err));
+      lmgenl_close (lmsock);
+      return err;
+    }
+
   return 0;
 }
 
@@ -245,31 +253,44 @@ lmgenl_close (lmsock_t *lmsock)
 #define IFREQATTR(a)					\
   if (!attrs[a])					\
   {							\
-    zlog_err ("%s: no " #a " attribute", __func__);	\
+    if (IS_ZEBRA_DEBUG_KERNEL)                          \
+      zlog_debug ("%s: no " #a " attribute", __func__);	\
     return -1;						\
   }							\
   else
 
+#define IFOPTATTR(a)					\
+  if (!attrs[a])					\
+  {							\
+    if (IS_ZEBRA_DEBUG_KERNEL)                          \
+      zlog_debug ("%s: no " #a " attribute", __func__);	\
+  }							\
+  else
+
 /*
- * Function: lmsend_padq_rqst()
+ * Function: lmgenl_send_metrics_request()
  *
  * Description:
  * ============
- * Send a PADQ Request message to PPP/CVMI
+ * send a link metrics request
  *
  * Input parameters:
  * ================
- *   lmsock = Pointer to the LM socket structure
- *   msg    = Pointer to the Linkmetric Request message to send
+ *   request = pointer to link metrics request structure
  *
  * Output Parameters:
  * ==================
- *   The number of bytes sent or a negative error value
+ *    0, Success
+ *    Otherwise failure
  */
-static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg)
+int
+lmgenl_send_metrics_request (const struct zebra_linkmetrics_request *request)
 {
   struct nl_msg *nlmsg;
   int len;
+
+  if (lmgenl_sock.sk == NULL)
+    return -1;
 
   nlmsg = nlmsg_alloc();
   if (nlmsg == NULL)
@@ -278,15 +299,21 @@ static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg)
       return -1;
     }
 
-  genlmsg_put (nlmsg, NL_AUTO_PID, NL_AUTO_SEQ, lmsock->lmgenl_family,
+  genlmsg_put (nlmsg, NL_AUTO_PID, NL_AUTO_SEQ, lmgenl_sock.lmgenl_family,
 	       0, 0, LMGENL_CMD_PADQ_RQST, LMGENL_VERSION);
 
-  NLA_PUT_U32 (nlmsg, LMGENL_ATTR_IFINDEX, msg->ifindex);
+  NLA_PUT_U32 (nlmsg, LMGENL_ATTR_IFINDEX, request->ifindex);
 
-  NLA_PUT (nlmsg, LMGENL_ATTR_REMOTEV6LLADDR, sizeof(msg->linklocal_addr),
-	   &msg->linklocal_addr);
+  if (!IN6_IS_ADDR_UNSPECIFIED (&request->nbr_addr6))
+    {
+      NLA_PUT (nlmsg, LMGENL_ATTR_REMOTEV6LLADDR,
+               sizeof(request->nbr_addr6), &request->nbr_addr6);
+    }
 
-  len = nl_send_auto_complete (lmsock->sk, nlmsg);
+  if (request->nbr_addr4.s_addr != INADDR_ANY)
+    NLA_PUT_U32 (nlmsg, LMGENL_ATTR_REMOTEV4ADDR, request->nbr_addr4.s_addr);
+
+  len = nl_send_auto_complete (lmgenl_sock.sk, nlmsg);
   if (len < 0)
     {
       zlog_err ("%s: nl_send_auto_complete() failed: %s",
@@ -304,12 +331,46 @@ static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg)
 }
 
 /*
- * Function: lmgenl_recv_padq()
+ * Scale rate (given in kbps) by the units defined by RFC 5578 and
+ * return the resulting datarate in kbps.
+ */
+static uint64_t
+lmgenl_datarate (uint16_t rate, uint8_t units)
+{
+  uint64_t r = rate;
+
+  switch (units)
+    {
+    case 0:                     /* kbps */
+      break;
+
+    case 1:                     /* mbps */
+      r *= 1000;
+      break;
+
+    case 2:                     /* gbps */
+      r *= 1000000;
+      break;
+
+    case 3:                     /* tbps */
+      r *= 1000000000;
+      break;
+
+    default:
+      zlog_err ("%s: invalid datarate units: 0x%x", __func__, units);
+      break;
+    }
+
+  return r;
+}
+
+/*
+ * Function: lmgenl_recv_metrics()
  *
  * Description:
  * ============
- * Parse a padq generic netlink message and call zserv_linkmetrics()
- * to process the link metrics update.
+ * Parse a link metrics generic netlink message and call
+ * zserv_send_linkmetrics() to process the update.
  *
  * Input parameters:
  * ================
@@ -321,10 +382,10 @@ static int lmsend_padq_rqst (lmsock_t *lmsock, lmm_rqst_msg_t *msg)
  *    Otherwise failure
  */
 static int
-lmgenl_recv_padq (struct nlmsghdr *nlh)
+lmgenl_recv_metrics (struct nlmsghdr *nlh)
 {
   struct nlattr *attrs[LMGENL_ATTR_MAX + 1];
-  zebra_linkmetrics_t linkmetrics;
+  struct zebra_linkmetrics metrics;
   int err;
 
   err = genlmsg_parse (nlh, 0, attrs, LMGENL_ATTR_MAX, lmgenl_policy);
@@ -334,80 +395,108 @@ lmgenl_recv_padq (struct nlmsghdr *nlh)
       return -1;
     }
 
-  memset (&linkmetrics, 0, sizeof (linkmetrics));
+  memset (&metrics, 0, sizeof (metrics));
 
   IFREQATTR (LMGENL_ATTR_IFINDEX)
     {
-      linkmetrics.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
-      if (linkmetrics.ifindex < 1)
+      metrics.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
+      if (metrics.ifindex < 1)
 	{
-	  zlog_err ("%s: invalid ifindex: %u", __func__, linkmetrics.ifindex);
+	  zlog_err ("%s: invalid ifindex: %u", __func__, metrics.ifindex);
 	  return -1;
 	}
     }
 
-  IFREQATTR (LMGENL_ATTR_REMOTEV6LLADDR)
+  IFOPTATTR (LMGENL_ATTR_REMOTEV6LLADDR)
     {
-      nla_memcpy (&linkmetrics.linklocal_addr,
-		  attrs[LMGENL_ATTR_REMOTEV6LLADDR],
-		  sizeof (linkmetrics.linklocal_addr));
-      if (!IN6_IS_ADDR_LINKLOCAL (&linkmetrics.linklocal_addr))
+      nla_memcpy (&metrics.nbr_addr6, attrs[LMGENL_ATTR_REMOTEV6LLADDR],
+		  sizeof (metrics.nbr_addr6));
+      if (!IN6_IS_ADDR_LINKLOCAL (&metrics.nbr_addr6))
 	{
 	  char buf[INET6_ADDRSTRLEN];
 
-	  inet_ntop (AF_INET6, &linkmetrics.linklocal_addr, buf, sizeof (buf));
+	  inet_ntop (AF_INET6, &metrics.nbr_addr6, buf, sizeof (buf));
 	  zlog_err ("%s: invalid link-local address: %s", __func__, buf);
 	  return -1;
 	}
     }
 
+  IFOPTATTR (LMGENL_ATTR_REMOTEV4ADDR)
+    {
+      metrics.nbr_addr4.s_addr =
+        nla_get_u32 (attrs[LMGENL_ATTR_REMOTEV4ADDR]);
+    }
+
   IFREQATTR (LMGENL_ATTR_PADQ_RLQ)
     {
-      linkmetrics.metrics.rlq = nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RLQ]);
-      if (linkmetrics.metrics.rlq > 100)
+      metrics.metrics.rlq = nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RLQ]);
+      if (metrics.metrics.rlq > 100)
 	{
 	  zlog_err ("%s: invalid relative link quality: %u",
-		    __func__, linkmetrics.metrics.rlq);
+		    __func__, metrics.metrics.rlq);
 	  return -1;
 	}
     }
 
   IFREQATTR (LMGENL_ATTR_PADQ_RESOURCE)
     {
-      linkmetrics.metrics.resource =
-	nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RESOURCE]);
-      if (linkmetrics.metrics.resource > 100)
+      metrics.metrics.resource = nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RESOURCE]);
+      if (metrics.metrics.resource > 100)
 	{
 	  zlog_err ("%s: invalid resources: %u",
-		    __func__, linkmetrics.metrics.resource);
+		    __func__, metrics.metrics.resource);
 	  return -1;
 	}
     }
 
   IFREQATTR (LMGENL_ATTR_PADQ_LATENCY)
-    linkmetrics.metrics.latency =
-      nla_get_u16 (attrs[LMGENL_ATTR_PADQ_LATENCY]);
+    {
+      metrics.metrics.latency = nla_get_u16 (attrs[LMGENL_ATTR_PADQ_LATENCY]);
+    }
 
   IFREQATTR (LMGENL_ATTR_PADQ_CDR)
-    linkmetrics.metrics.current_datarate =
-      nla_get_u16 (attrs[LMGENL_ATTR_PADQ_CDR]);
+    {
+      metrics.metrics.current_datarate =
+        nla_get_u16 (attrs[LMGENL_ATTR_PADQ_CDR]);
+    }
 
   IFREQATTR (LMGENL_ATTR_PADQ_MDR)
-    linkmetrics.metrics.max_datarate =
-      nla_get_u16 (attrs[LMGENL_ATTR_PADQ_MDR]);
-
-  if (linkmetrics.metrics.current_datarate > linkmetrics.metrics.max_datarate)
     {
-      zlog_err ("%s: invalid current/maximum datarate: %u/%u", __func__,
-		linkmetrics.metrics.current_datarate,
-		linkmetrics.metrics.max_datarate);
+      metrics.metrics.max_datarate =
+        nla_get_u16 (attrs[LMGENL_ATTR_PADQ_MDR]);
+    }
+
+  IFOPTATTR (LMGENL_ATTR_PADQ_RESERVED2)
+    {
+      uint8_t reserved2;
+      uint8_t units;
+
+      reserved2 = nla_get_u8 (attrs[LMGENL_ATTR_PADQ_RESERVED2]);
+
+      units = (reserved2 >> 1) & 3;
+      metrics.metrics.current_datarate =
+        lmgenl_datarate (metrics.metrics.current_datarate, units);
+
+      units = (reserved2 >> 3) & 3;
+      metrics.metrics.max_datarate =
+        lmgenl_datarate (metrics.metrics.max_datarate, units);
+
+      if ((reserved2 & 1))
+        metrics.metrics.flags |= RECEIVE_ONLY;
+    }
+
+  if (metrics.metrics.current_datarate > metrics.metrics.max_datarate)
+    {
+      zlog_err ("%s: invalid current/maximum datarate: %" PRIu64 "/%" PRIu64,
+                __func__, metrics.metrics.current_datarate,
+                metrics.metrics.max_datarate);
       return -1;
     }
 
   if (IS_ZEBRA_DEBUG_KERNEL)
-    zebra_linkmetrics_logdebug (&linkmetrics);
+    zebra_linkmetrics_logdebug (&metrics);
 
-  zserv_linkmetrics (&linkmetrics);
+  zserv_send_linkmetrics (&metrics, NULL);
 
   return 0;
 }
@@ -418,7 +507,7 @@ lmgenl_recv_padq (struct nlmsghdr *nlh)
  * Description:
  * ============
  * Parse a link status generic netlink message and call
- * zserv_linkstatus() to process the update.
+ * zserv_send_linkstatus() to process the update.
  *
  * Input parameters:
  * ================
@@ -433,7 +522,7 @@ static int
 lmgenl_recv_status (struct nlmsghdr *nlh)
 {
   struct nlattr *attrs[LMGENL_ATTR_MAX + 1];
-  zebra_linkstatus_t linkstatus;
+  struct zebra_linkstatus status;
   int err;
 
   err = genlmsg_parse (nlh, 0, attrs, LMGENL_ATTR_MAX, lmgenl_policy);
@@ -443,45 +532,53 @@ lmgenl_recv_status (struct nlmsghdr *nlh)
       return -1;
     }
 
-  memset (&linkstatus, 0, sizeof (linkstatus));
+  memset (&status, 0, sizeof (status));
 
   IFREQATTR (LMGENL_ATTR_IFINDEX)
     {
-      linkstatus.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
-      if (linkstatus.ifindex < 1)
+      status.ifindex = nla_get_u32 (attrs[LMGENL_ATTR_IFINDEX]);
+      if (status.ifindex < 1)
 	{
-	  zlog_err ("%s: invalid ifindex: %u", __func__, linkstatus.ifindex);
+	  zlog_err ("%s: invalid ifindex: %u", __func__, status.ifindex);
 	  return -1;
 	}
     }
 
-  IFREQATTR (LMGENL_ATTR_REMOTEV6LLADDR)
+  IFOPTATTR (LMGENL_ATTR_REMOTEV6LLADDR)
     {
-      nla_memcpy (&linkstatus.linklocal_addr,
-		  attrs[LMGENL_ATTR_REMOTEV6LLADDR],
-		  sizeof (linkstatus.linklocal_addr));
-      if (!IN6_IS_ADDR_LINKLOCAL (&linkstatus.linklocal_addr))
+      nla_memcpy (&status.nbr_addr6, attrs[LMGENL_ATTR_REMOTEV6LLADDR],
+		  sizeof (status.nbr_addr6));
+      if (!IN6_IS_ADDR_LINKLOCAL (&status.nbr_addr6))
 	{
 	  char buf[INET6_ADDRSTRLEN];
 
-	  inet_ntop (AF_INET6, &linkstatus.linklocal_addr, buf, sizeof (buf));
+	  inet_ntop (AF_INET6, &status.nbr_addr6, buf, sizeof (buf));
 	  zlog_err ("%s: invalid link-local address: %s", __func__, buf);
 	  return -1;
 	}
     }
 
+  IFOPTATTR (LMGENL_ATTR_REMOTEV4ADDR)
+    {
+      status.nbr_addr4.s_addr =
+        nla_get_u32 (attrs[LMGENL_ATTR_REMOTEV4ADDR]);
+    }
+
   IFREQATTR (LMGENL_ATTR_STS_STATUS)
-    linkstatus.status = nla_get_u8 (attrs[LMGENL_ATTR_STS_STATUS]);
+    {
+      status.status = nla_get_u8 (attrs[LMGENL_ATTR_STS_STATUS]);
+    }
 
   if (IS_ZEBRA_DEBUG_KERNEL)
-    zebra_linkstatus_logdebug (&linkstatus);
+    zebra_linkstatus_logdebug (&status);
 
-  zserv_linkstatus (&linkstatus);
+  zserv_send_linkstatus (&status, NULL);
 
   return 0;
 }
 
 #undef IFREQATTR
+#undef IFOPTATTR
 
 /*
  * function: lmgenl_recv()
@@ -501,23 +598,15 @@ lmgenl_recv_status (struct nlmsghdr *nlh)
  *    Otherwise failure
  */
 static int
-lmgenl_recv (struct nl_sock *sk)
+__lmgenl_recv (struct nl_msg *msg, void *arg)
 {
-  int len;
-  struct sockaddr_nl peer;
-  unsigned char *buf;
   struct nlmsghdr *nlh;
   struct genlmsghdr *ghdr;
 
-  len = nl_recv (sk, &peer, &buf, NULL);
-  if (len <= 0)
-    {
-      if (len)
-	zlog_err ("%s: nl_recv() failed: %s", __func__, nl_geterror (len));
-      return -1;
-    }
+  nlh = nlmsg_hdr (msg);
+  if (!genlmsg_valid_hdr (nlh, 0))
+    return NL_SKIP;
 
-  nlh = (struct nlmsghdr *)buf;
   ghdr = nlmsg_data (nlh);
 
   if (IS_ZEBRA_DEBUG_KERNEL)
@@ -527,7 +616,7 @@ lmgenl_recv (struct nl_sock *sk)
   switch (ghdr->cmd)
     {
     case LMGENL_CMD_PADQ:
-      lmgenl_recv_padq (nlh);
+      lmgenl_recv_metrics (nlh);
       break;
 
     case LMGENL_CMD_STATUS:
@@ -543,7 +632,20 @@ lmgenl_recv (struct nl_sock *sk)
       break;
     }
 
-  free (buf);
+  return NL_OK;
+}
+
+static int
+lmgenl_recv (struct nl_sock *sk)
+{
+  int err;
+
+  err = nl_recvmsgs_default (sk);
+  if (err)
+    {
+      zlog_err ("%s: nl_recv() failed: %s", __func__, nl_geterror (err));
+      return -1;
+    }
 
   return 0;
 }
@@ -587,35 +689,6 @@ lmgenl_read (struct thread *thread)
       zlog_err ("%s: thread_add_read() failed", __func__);
       return -1;
     }
-
-  return ret;
-}
-
-/*
- * Function: lmgenl_write()
- *
- * Description:
- * ============
- * write to Multicast Group to send a PADQ request msg
- *
- * Input parameters:
- * ================
- *   thread = Thread descriptor
- *
- * Output Parameters:
- * ==================
- *    0, Success
- *    Otherwise failure
- */
-int lmgenl_write (lmm_rqst_msg_t *msg)
-{
-  int ret=0;
-
-  if (lmgenl_sock.sk == NULL)
-    return -1;
-
-  /* Send a PADQ request message to PPP/CVMI layer */
-  ret = lmsend_padq_rqst (&lmgenl_sock, msg);
 
   return ret;
 }
@@ -684,4 +757,5 @@ linkmetrics_netlink_close (void)
 
   return;
 }
+
 #endif  /* HAVE_LIBNLGENL */

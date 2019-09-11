@@ -26,3 +26,4 @@ ripd=no
 ripngd=no
 isisd=no
 babeld=no
+xpimd=no

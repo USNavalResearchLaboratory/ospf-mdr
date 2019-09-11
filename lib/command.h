@@ -23,9 +23,21 @@
 #ifndef _ZEBRA_COMMAND_H
 #define _ZEBRA_COMMAND_H
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+
 #include "vector.h"
 #include "vty.h"
 #include "lib/route_types.h"
+
+#ifdef __cplusplus
+#define vector __quagga_vector
+#define string __quagga_string
+#endif /* __cplusplus */
 
 /* Host configuration variable */
 struct host
@@ -104,6 +116,11 @@ enum node_type
   PROTOCOL_NODE,                /* protocol filtering node */
   RIB_NODE,			/* RIB node. */
   VTY_NODE,			/* Vty node. */
+#ifdef QUAGGA_MULTICAST
+  MFEA_NODE,
+  MLD6IGMP_NODE,
+  PIM_NODE,
+#endif  /* QUAGGA_MULTICAST */
 };
 
 /* Node which has some commands and prompt string and configuration
@@ -173,6 +190,21 @@ struct desc
 #ifndef VTYSH_EXTRACT_PL  
 
 /* helper defines for end-user DEFUN* macros */
+#ifdef __cplusplus
+#define DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr, attrs, dnum) \
+  struct cmd_element cmdname =						\
+  {									\
+    cmdstr,								\
+    funcname,								\
+    helpstr,								\
+    dnum,								\
+    NULL,								\
+    0,									\
+    NULL,								\
+    NULL,								\
+    attrs,								\
+  };
+#else
 #define DEFUN_CMD_ELEMENT(funcname, cmdname, cmdstr, helpstr, attrs, dnum) \
   struct cmd_element cmdname = \
   { \
@@ -182,6 +214,7 @@ struct desc
     .attr = attrs, \
     .daemon = dnum, \
   };
+#endif	/* __cplusplus */
 
 #define DEFUN_CMD_FUNC_DECL(funcname) \
   static int funcname (struct cmd_element *, struct vty *, int, const char *[]);
@@ -367,4 +400,10 @@ extern struct host host;
 
 /* "<cr>" global */
 extern char *command_cr;
+
+#ifdef __cplusplus
+#undef vector
+#undef string
+#endif /* __cplusplus */
+
 #endif /* _ZEBRA_COMMAND_H */

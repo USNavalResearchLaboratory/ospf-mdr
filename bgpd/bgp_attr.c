@@ -2038,7 +2038,6 @@ bgp_attr_check (struct peer *peer, struct attr *attr)
   return BGP_ATTR_PARSE_PROCEED;
 }
 
-int stream_put_prefix (struct stream *, struct prefix *);
 
 /* Make attribute packet. */
 bgp_size_t

@@ -30,6 +30,7 @@ Boston, MA 02111-1307, USA.  */
 #include "vty.h"
 #include "command.h"
 #include "workqueue.h"
+#include "built.h"
 
 /* Command vector which includes some level of command lists. Normally
    each daemon maintains each own cmdvec. */
@@ -84,7 +85,7 @@ static const char *default_motd =
 "\r\n\
 Hello, this is " QUAGGA_PROGNAME " (version " QUAGGA_VERSION ").\r\n\
 " QUAGGA_COPYRIGHT "\r\n\
-\r\n";
+" GIT_INFO "\r\n";
 
 
 static const struct facility_map {
@@ -156,6 +157,7 @@ print_version (const char *progname)
 {
   printf ("%s version %s\n", progname, QUAGGA_VERSION);
   printf ("%s\n", QUAGGA_COPYRIGHT);
+  printf ("built %s\n", quagga_built_string);
 }
 
 
@@ -2412,6 +2414,11 @@ DEFUN (config_exit,
     case OSPF_NODE:
     case OSPF6_NODE:
     case ISIS_NODE:
+#ifdef QUAGGA_MULTICAST
+    case MFEA_NODE:
+    case MLD6IGMP_NODE:
+    case PIM_NODE:
+#endif  /* QUAGGA_MULTICAST */
     case KEYCHAIN_NODE:
     case MASC_NODE:
     case RMAP_NODE:
@@ -2469,6 +2476,11 @@ DEFUN (config_end,
     case OSPF_NODE:
     case OSPF6_NODE:
     case ISIS_NODE:
+#ifdef QUAGGA_MULTICAST
+    case MFEA_NODE:
+    case MLD6IGMP_NODE:
+    case PIM_NODE:
+#endif  /* QUAGGA_MULTICAST */
     case KEYCHAIN_NODE:
     case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
@@ -2491,7 +2503,7 @@ DEFUN (show_version,
 {
   vty_out (vty, "Quagga %s (%s).%s", QUAGGA_VERSION, host.name?host.name:"",
 	   VTY_NEWLINE);
-  vty_out (vty, "%s%s", QUAGGA_COPYRIGHT, VTY_NEWLINE);
+  vty_out (vty, "%s%s%s", QUAGGA_COPYRIGHT, GIT_INFO, VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }

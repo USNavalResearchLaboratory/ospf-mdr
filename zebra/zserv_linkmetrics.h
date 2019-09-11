@@ -29,10 +29,18 @@ struct vty;
 
 void zserv_linkmetrics_init (void);
 int zserv_linkmetrics_config_write (struct vty *vty);
-int zserv_linkmetrics (zebra_linkmetrics_t *linkmetrics);
-int zserv_linkstatus (zebra_linkstatus_t *linkstatus);
-int zserv_linkmetrics_subscribe (uint16_t cmd, struct zserv *client,
+
+int zserv_send_linkmetrics (struct zebra_linkmetrics *metrics,
+                            struct zserv *exclude_client);
+int zserv_send_linkmetrics_request (struct zebra_linkmetrics_request *request,
+                                    struct zserv *exclude_client);
+int zserv_send_linkstatus (struct zebra_linkstatus *status,
+                           struct zserv *exclude_client);
+
+int zserv_recv_linkmetrics_subscribe (uint16_t cmd, struct zserv *client,
 				 uint16_t length);
-int zserv_linkmetrics_rqst (struct stream *s, uint16_t length);
+int zserv_recv_linkmetrics (struct zserv *client, uint16_t length);
+int zserv_recv_linkmetrics_request (struct zserv *client, uint16_t length);
+int zserv_recv_linkstatus (struct zserv *client, uint16_t length);
 
 #endif	/* _ZSERV_LINKMETRICS_H_ */

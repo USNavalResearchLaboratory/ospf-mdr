@@ -1,12 +1,12 @@
 \input texinfo @c -*- texinfo -*-
+@c Set variables - sourced from defines.texi
+@include defines.texi
+
 @c %**start of header
 @setchapternewpage odd
 @settitle @uref{http://www.quagga.net,,@value{PACKAGE_NAME}}
 @setfilename quagga.info
 @c %**end of header
-
-@c Set variables - sourced from defines.texi
-@include defines.texi
 
 @c automake will automatically generate version.texi
 @c and set EDITION, VERSION, UPDATED and UPDATED-MONTH
@@ -90,6 +90,7 @@ for @value{PACKAGE_STRING}. @uref{http://www.quagga.net,,Quagga} is a fork of
 * OSPF-MANET::
 * Babel::
 * BGP::
+* Multicast Routing::
 * Configuring Quagga as a Route Server::
 * VTY shell::
 * Filtering::
@@ -117,6 +118,7 @@ for @value{PACKAGE_STRING}. @uref{http://www.quagga.net,,Quagga} is a fork of
 @include ospf6d-manet.texi
 @include babeld.texi
 @include bgpd.texi
+@include xpimd.texi
 @include routeserver.texi
 @include vtysh.texi
 @include filter.texi

@@ -72,13 +72,14 @@ void
 ospf6_options_printbuf (u_char *options, char *buf, int size)
 {
   const char *dc, *r, *n, *mc, *e, *v6;
-  const char *L, *AF;
+  const char *AT, *L, *AF;
   int tmp;
 
+  AT = (OSPF6_OPT_ISSET (options, OSPF6_OPT_AT, 1) ? "AT" : "--");
   L = (OSPF6_OPT_ISSET (options, OSPF6_OPT_L, 1) ? "L" : "-");
   AF = (OSPF6_OPT_ISSET (options, OSPF6_OPT_AF, 1) ? "AF" : "--");
 
-  tmp = snprintf (buf, size, "%s|%s|", L, AF);
+  tmp = snprintf (buf, size, "%s|%s|%s|", AT, L, AF);
   if (tmp < 0 || tmp >= size)
     return;
   buf += tmp;

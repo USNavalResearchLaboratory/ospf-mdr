@@ -1,9 +1,9 @@
 EXTRA_DIST =					\
 	README.Debian				\
 	README.Debian.MD5			\
-	changelog				\
+	changelog.in				\
 	compat					\
-	control					\
+	control.in				\
 	copyright				\
 	my/daemons				\
 	my/debian.conf				\

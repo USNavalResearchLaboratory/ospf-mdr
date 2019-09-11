@@ -33,43 +33,45 @@ struct prefix;
 struct prefix_ipv4;
 struct prefix_ipv6;
 
-extern bool ospf6_af_is_ipv6_unicast (struct ospf6 *o);
-extern bool ospf6_af_is_ipv6_multicast (struct ospf6 *o);
-extern bool ospf6_af_is_ipv4_unicast (struct ospf6 *o);
-extern bool ospf6_af_is_ipv4_multicast (struct ospf6 *o);
+extern bool ospf6_af_is_ipv6_unicast (const struct ospf6 *o);
+extern bool ospf6_af_is_ipv6_multicast (const struct ospf6 *o);
+extern bool ospf6_af_is_ipv4_unicast (const struct ospf6 *o);
+extern bool ospf6_af_is_ipv4_multicast (const struct ospf6 *o);
 
-extern bool ospf6_af_is_ipv6 (struct ospf6 *o);
-extern bool ospf6_af_is_ipv4 (struct ospf6 *o);
+extern bool ospf6_af_is_ipv6 (const struct ospf6 *o);
+extern bool ospf6_af_is_ipv4 (const struct ospf6 *o);
 
 extern int ospf6_af_address_convert6to4 (struct in_addr *addr4,
-					 struct in6_addr *addr6);
+					 const struct in6_addr *addr6);
 extern void ospf6_af_address_convert4to6 (struct in6_addr *addr6,
-					  struct in_addr *addr4);
+					  const struct in_addr *addr4);
 extern int ospf6_af_prefix_convert6to4 (struct prefix_ipv4 *p4,
-					struct prefix_ipv6 *p6);
+					const struct prefix_ipv6 *p6);
 extern int ospf6_af_prefix_convert4to6 (struct prefix_ipv6 *p6,
-					struct prefix_ipv4 *p4);
-extern unsigned int ospf6_af_prefixlen6 (struct ospf6 *o,
+					const struct prefix_ipv4 *p4);
+extern unsigned int ospf6_af_prefixlen6 (const struct ospf6 *o,
 					 unsigned int prefixlen6);
 
-extern int ospf6_af_validate_ipv6_unicast (struct in6_addr *addr);
-extern int ospf6_af_validate_ipv6_multicast (struct in6_addr *addr);
-extern int ospf6_af_validate_ipv4_unicast (struct in6_addr *addr);
-extern int ospf6_af_validate_ipv4_multicast (struct in6_addr *addr);
-extern int ospf6_af_validate_prefix (struct ospf6 *o,
-				     struct in6_addr *prefix,
+extern int ospf6_af_validate_ipv6_unicast (const struct in6_addr *addr);
+extern int ospf6_af_validate_ipv6_multicast (const struct in6_addr *addr);
+extern int ospf6_af_validate_ipv4_unicast (const struct in6_addr *addr);
+extern int ospf6_af_validate_ipv4_multicast (const struct in6_addr *addr);
+extern int ospf6_af_validate_prefix (const struct ospf6 *o,
+				     const struct in6_addr *prefix,
 				     unsigned int prefixlen,
                                      bool allow_default);
 
-extern const char *ospf6_prefix2str (struct ospf6 *o, struct prefix *prefix,
+extern const char *ospf6_prefix2str (const struct ospf6 *o,
+				     const struct prefix *prefix,
 				     char *buf, size_t bufsize);
-extern const char *ospf6_addr2str (struct ospf6 *o, struct in6_addr *addr,
+extern const char *ospf6_addr2str (const struct ospf6 *o,
+				   const struct in6_addr *addr,
 				   char *buf, size_t bufsize);
-extern const char *ospf6_addr2str6 (struct in6_addr *addr,
+extern const char *ospf6_addr2str6 (const struct in6_addr *addr,
 				    char *buf, size_t bufsize);
 extern const char *ospf6_id2str (u_int32_t id, char *buf, size_t bufsize);
 extern int ospf6_str2id (const char *s, u_int32_t *id);
-extern int ospf6_str2prefix (struct ospf6 *o, const char *str,
+extern int ospf6_str2prefix (const struct ospf6 *o, const char *str,
 			     struct prefix *prefix);
 
 #endif /* OSPF6_AF_H */

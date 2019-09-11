@@ -31,6 +31,7 @@ configure-stamp:
 
 	# according to redhat/quagga.spec as of 2003-08-18 with Debian hardening
 	./configure \
+		--with-pkg-git-version \
 		--prefix=/usr \
 		--libexecdir=/usr/lib/quagga \
 		--sbindir=/usr/lib/quagga \
@@ -164,7 +165,7 @@ binary-arch: build install
 	dh_installlogrotate
 	dh_installman -a
 	
-	dh_strip -a
+	dh_strip -a --dbg-package=quagga-mr-dbg
 	dh_compress -a -X.pdf
 	dh_fixperms -a
 	dh_makeshlibs -a

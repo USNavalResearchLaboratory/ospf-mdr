@@ -326,14 +326,14 @@ if_get_by_name_len(const char *name, size_t namelen)
 
 /* Does interface up ? */
 int
-if_is_up (struct interface *ifp)
+if_is_up (const struct interface *ifp)
 {
   return ifp->flags & IFF_UP;
 }
 
 /* Is interface running? */
 int
-if_is_running (struct interface *ifp)
+if_is_running (const struct interface *ifp)
 {
   return ifp->flags & IFF_RUNNING;
 }
@@ -341,7 +341,7 @@ if_is_running (struct interface *ifp)
 /* Is the interface operative, eg. either UP & RUNNING
    or UP & !ZEBRA_INTERFACE_LINK_DETECTION */
 int
-if_is_operative (struct interface *ifp)
+if_is_operative (const struct interface *ifp)
 {
   return ((ifp->flags & IFF_UP) &&
 	  (ifp->flags & IFF_RUNNING || !CHECK_FLAG(ifp->status, ZEBRA_INTERFACE_LINKDETECTION)));
@@ -349,7 +349,7 @@ if_is_operative (struct interface *ifp)
 
 /* Is this loopback interface ? */
 int
-if_is_loopback (struct interface *ifp)
+if_is_loopback (const struct interface *ifp)
 {
   /* XXX: Do this better, eg what if IFF_WHATEVER means X on platform M
    * but Y on platform N?
@@ -359,21 +359,21 @@ if_is_loopback (struct interface *ifp)
 
 /* Does this interface support broadcast ? */
 int
-if_is_broadcast (struct interface *ifp)
+if_is_broadcast (const struct interface *ifp)
 {
   return ifp->flags & IFF_BROADCAST;
 }
 
 /* Does this interface support broadcast ? */
 int
-if_is_pointopoint (struct interface *ifp)
+if_is_pointopoint (const struct interface *ifp)
 {
   return ifp->flags & IFF_POINTOPOINT;
 }
 
 /* Does this interface support multicast ? */
 int
-if_is_multicast (struct interface *ifp)
+if_is_multicast (const struct interface *ifp)
 {
   return ifp->flags & IFF_MULTICAST;
 }

@@ -66,6 +66,8 @@
 #define OSPF6_OPT_CLEAR_ALL(x) ((x)[0] = (x)[1] = (x)[2] = 0)
 
 /* Middle byte of the 24-bit options field */
+#define OSPF6_OPT_AT (1 << 2)   /* Indicates an Authentication Trailer
+                                   is present (RFC 7166) */
 #define OSPF6_OPT_L  (1 << 1)   /* Indicates a LLS Data Block (RFC 5613) */
 #define OSPF6_OPT_AF (1 << 0)   /* Address Families Capability (RFC 5838) */
 

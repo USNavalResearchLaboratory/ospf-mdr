@@ -710,6 +710,11 @@ vty_end_config (struct vty *vty)
     case OSPF_NODE:
     case OSPF6_NODE:
     case ISIS_NODE:
+#ifdef QUAGGA_MULTICAST
+    case MFEA_NODE:
+    case MLD6IGMP_NODE:
+    case PIM_NODE:
+#endif  /* QUAGGA_MULTICAST */
     case KEYCHAIN_NODE:
     case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
@@ -1114,6 +1119,11 @@ vty_stop_input (struct vty *vty)
     case OSPF_NODE:
     case OSPF6_NODE:
     case ISIS_NODE:
+#ifdef QUAGGA_MULTICAST
+    case MFEA_NODE:
+    case MLD6IGMP_NODE:
+    case PIM_NODE:
+#endif  /* QUAGGA_MULTICAST */
     case KEYCHAIN_NODE:
     case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
@@ -3008,6 +3018,8 @@ vty_terminate (void)
     {
       vty_reset ();
       vector_free (vtyvec);
+      vtyvec = NULL;
       vector_free (Vvty_serv_thread);
+      Vvty_serv_thread = NULL;
     }
 }

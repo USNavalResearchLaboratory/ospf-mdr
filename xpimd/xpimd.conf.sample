@@ -1,0 +1,39 @@
+password z
+!
+debug mfea
+debug igmp
+debug pim
+!
+interface eth0
+  ip mfea
+!
+  ip igmp
+! ip igmp version 2
+! ip igmp query-interval 125
+! ip igmp last-member-query-interval 1
+! ip igmp query-max-response-time 10
+! ip igmp robust-count 2
+!
+  ip pim
+!  ip pim version 2
+!  ip pim ip-router-alert-option-check
+!  ip pim hello-triggered-delay 5
+!  ip pim hello-interval 30
+!  ip pim hello-holdtime 105
+!  ip pim dr-priority 1
+!  ip pim propagation-delay 500
+!  ip pim override-interval 2500
+!  ip pim is-tracking-support-disabled
+!  ip pim accept-nohello-neighbors
+!  ip pim join-prune-interval 60
+!  ip pim add-alternative-subnet 10.62.0.1/24
+!
+router mfea
+!
+router igmp
+!
+router pim
+!  ip pim spt-threshold interval 120 bytes 5000
+!  ip pim rp-address 1.2.3.4 224.3.2.0/24 priority 10 hash-mask-length 28
+!  ip pim bsr-candidate eth1 225.9.8.7/28 non-scoped priority 201 hash-mask-length 17
+!  ip pim rp-candidate eth1 224.72.149.231/26 non-scoped priority 125 holdtime 48

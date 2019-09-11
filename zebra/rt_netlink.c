@@ -385,8 +385,11 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *),
                        lookup (nlmsg_str, h->nlmsg_type), h->nlmsg_type,
                        h->nlmsg_seq, h->nlmsg_pid);
 
-          /* skip unsolicited messages originating from command socket */
-          if (nl != &netlink_cmd && h->nlmsg_pid == netlink_cmd.snl.nl_pid)
+          /* skip unsolicited messages originating from command socket
+           * linux sets the originators port-id for {NEW|DEL}ADDR messages,
+           * so this has to be checked here. */
+          if (nl != &netlink_cmd && h->nlmsg_pid == netlink_cmd.snl.nl_pid
+              && (h->nlmsg_type != RTM_NEWADDR && h->nlmsg_type != RTM_DELADDR))
             {
               if (IS_ZEBRA_DEBUG_KERNEL)
                 zlog_debug ("netlink_parse_info: %s packet comes from %s",
@@ -1496,6 +1499,17 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
     {
       for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
         {
+          /* direct (single hop) routes should have link scope */
+          switch (nexthop->type)
+            {
+            case NEXTHOP_TYPE_IFINDEX:
+            case NEXTHOP_TYPE_IFNAME:
+              req.r.rtm_scope = RT_SCOPE_LINK;
+              break;
+
+            default:
+              break;
+            }
 
           if ((cmd == RTM_NEWROUTE
                && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
@@ -1505,18 +1519,6 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
 
               if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
                 {
-                  /* direct (single hop) routes should have link scope */
-		  switch (nexthop->rtype)
-		    {
-		    case NEXTHOP_TYPE_IFINDEX:
-		    case NEXTHOP_TYPE_IFNAME:
-		      req.r.rtm_scope = RT_SCOPE_LINK;
-		      break;
-
-		    default:
-		      break;
-		    }
-
                   if (IS_ZEBRA_DEBUG_KERNEL)
                     {
                       zlog_debug
@@ -1583,18 +1585,6 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
                 }
               else
                 {
-                  /* direct (single hop) routes should have link scope */
-		  switch (nexthop->type)
-		    {
-		    case NEXTHOP_TYPE_IFINDEX:
-		    case NEXTHOP_TYPE_IFNAME:
-		      req.r.rtm_scope = RT_SCOPE_LINK;
-		      break;
-
-		    default:
-		      break;
-		    }
-
                   if (IS_ZEBRA_DEBUG_KERNEL)
                     {
                       zlog_debug
@@ -1688,6 +1678,18 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
            nexthop && (MULTIPATH_NUM == 0 || nexthop_num < MULTIPATH_NUM);
            nexthop = nexthop->next)
         {
+          /* direct (single hop) routes should have link scope */
+          switch (nexthop->type)
+            {
+            case NEXTHOP_TYPE_IFINDEX:
+            case NEXTHOP_TYPE_IFNAME:
+              req.r.rtm_scope = RT_SCOPE_LINK;
+              break;
+
+            default:
+              break;
+            }
+
           if ((cmd == RTM_NEWROUTE
                && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
               || (cmd == RTM_DELROUTE
@@ -1864,7 +1866,15 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
   if (nexthop_num == 0)
     {
       if (IS_ZEBRA_DEBUG_KERNEL)
-        zlog_debug ("netlink_route_multipath(): No useful nexthop.");
+        zlog_debug ("netlink_route_multipath(): No useful nexthop: ignoring "
+                    "%s %s/%d", lookup (nlmsg_str, cmd),
+#ifdef HAVE_IPV6
+                    (family == AF_INET) ? inet_ntoa (p->u.prefix4) :
+                    inet6_ntoa (p->u.prefix6),
+#else
+                    inet_ntoa (p->u.prefix4),
+#endif /* HAVE_IPV6 */
+                    p->prefixlen);
       return 0;
     }
 

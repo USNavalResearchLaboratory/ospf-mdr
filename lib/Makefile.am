@@ -5,16 +5,19 @@ DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 
 lib_LTLIBRARIES = libzebra.la
 libzebra_la_LDFLAGS = -version-info 0:0:0 
+if LDFLAGS_BSYMBOLIC_FUNCTIONS
+libzebra_la_LDFLAGS += -Wl,--dynamic-list=libzebra.dynamic-list
+endif
 
 libzebra_la_SOURCES = \
 	network.c pid_output.c getopt.c getopt1.c daemon.c \
-	checksum.c vector.c linklist.c vty.c command.c \
+	checksum.c vector.c linklist.c vty.c built.c command.c \
 	sockunion.c prefix.c thread.c if.c memory.c buffer.c table.c hash.c \
 	filter.c routemap.c distribute.c stream.c str.c log.c plist.c \
 	zclient.c sockopt.c smux.c md5.c if_rmap.c keychain.c privs.c \
 	sigevent.c pqueue.c jhash.c memtypes.c workqueue.c zebra_linkmetrics.c
 
-BUILT_SOURCES = memtypes.h route_types.h
+BUILT_SOURCES = memtypes.h route_types.h gitversion.h built.c
 
 libzebra_la_DEPENDENCIES = @LIB_REGEX@
 
@@ -27,7 +30,7 @@ pkginclude_HEADERS = \
 	str.h stream.h table.h thread.h vector.h version.h vty.h zebra.h \
 	plist.h zclient.h sockopt.h smux.h md5.h if_rmap.h keychain.h \
 	privs.h sigevent.h pqueue.h jhash.h zassert.h memtypes.h \
-	workqueue.h route_types.h lmgenl.h zebra_linkmetrics.h
+	workqueue.h route_types.h lmgenl.h zebra_linkmetrics.h built.h
 
 EXTRA_DIST = regex.c regex-gnu.h memtypes.awk route_types.pl route_types.txt
 
@@ -36,3 +39,32 @@ memtypes.h: $(srcdir)/memtypes.c $(srcdir)/memtypes.awk
 
 route_types.h: $(srcdir)/route_types.txt $(srcdir)/route_types.pl
 	@PERL@ $(srcdir)/route_types.pl < $(srcdir)/route_types.txt > $@
+
+if GIT_VERSION
+
+# bit of a trick here to always have up-to-date git stamps without triggering
+# unneccessary rebuilds.  .PHONY causes the .tmp file to be rebuilt always,
+# but if we use that on gitversion.h it'll ripple through the .c file deps.
+# (even if gitversion.h's file timestamp doesn't change, make will think it
+# did, because of .PHONY...)
+
+.PHONY: gitversion.h.tmp
+.SILENT: gitversion.h gitversion.h.tmp
+GITH=gitversion.h
+gitversion.h.tmp: $(srcdir)/../.git
+	@PERL@ $(srcdir)/gitversion.pl $(srcdir) > ${GITH}.tmp
+gitversion.h: gitversion.h.tmp
+	{ test -f ${GITH} && diff -s -q ${GITH}.tmp ${GITH}; } || cp -v ${GITH}.tmp ${GITH}
+
+else
+.PHONY: gitversion.h
+gitversion.h:
+	/bin/true
+endif
+
+.PHONY: built.c
+built.c:
+	printf "#include \"built.h\"\n" > $@
+	printf "const char *quagga_built_string = \"" >> $@
+	date "+%a %b %d %H:%M:%S %Z %Y" | tr -d \\n >> $@
+	printf "\";\n" >> $@

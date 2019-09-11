@@ -1,3 +1,9 @@
+quagga-mr (@VERSION@) stable; urgency=low
+
+  * automatically generated package
+
+ -- @MAINTAINER@ <@MAINTAINER_EMAIL@>  @RFC2822_DATE@
+
 quagga-mr (0.99.21mr2.2) unstable; urgency=low
 
   * Maintenance release; see RELEASE_NOTES.MobileRouting.

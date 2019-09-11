@@ -612,7 +612,6 @@ ospf6_link_lsa_originate (struct thread *thread)
   struct ospf6_link_lsa *link_lsa;
   struct ospf6_prefix *op;
   int suppress, af_is_ipv4;
-  struct in6_addr *linklocal_addr;
 
   oi = (struct ospf6_interface *) THREAD_ARG (thread);
   oi->thread_link_lsa = NULL;
@@ -633,22 +632,7 @@ ospf6_link_lsa_originate (struct thread *thread)
   else
     suppress = 0;
 
-  /*
-   * RFC 5838:
-   *
-   * 2.5. Next-Hop Calculation for IPv4 Unicast and Multicast AFs
-   *
-   * ... the link's IPv4 address will be advertised in the "link local
-   * address" field of the IPv4 instance's Link-LSA.  This address is
-   * placed in the first 32 bits of the "link local address" field and
-   * is used for IPv4 next-hop calculations.  The remaining bits MUST
-   * be set to zero.
-   */
   af_is_ipv4 = ospf6_af_is_ipv4 (oi->area->ospf6);
-  if (af_is_ipv4)
-    linklocal_addr = oi->linklocal_addr_ipv4;
-  else
-    linklocal_addr = oi->linklocal_addr;
 
   /* find previous LSA */
   old = ospf6_lsdb_lookup (htons (OSPF6_LSTYPE_LINK),
@@ -695,7 +679,7 @@ ospf6_link_lsa_originate (struct thread *thread)
     zlog_debug ("Originate Link-LSA for Interface %s", oi->interface->name);
 
   /* can't make Link-LSA if linklocal address not set */
-  if (linklocal_addr == NULL)
+  if (!ospf6_interface_has_linklocal_addr (oi))
     {
       if (IS_OSPF6_DEBUG_ORIGINATE (LINK))
         zlog_debug ("No Linklocal address on %s, defer originating",
@@ -715,7 +699,27 @@ ospf6_link_lsa_originate (struct thread *thread)
   link_lsa->priority = oi->priority;
   memcpy (link_lsa->options, oi->area->options, 3);
 
-  memcpy (&link_lsa->linklocal_addr, linklocal_addr, sizeof (struct in6_addr));
+  if (af_is_ipv4)
+    {
+      /*
+       * RFC 5838:
+       *
+       * 2.5. Next-Hop Calculation for IPv4 Unicast and Multicast AFs
+       *
+       * ... the link's IPv4 address will be advertised in the "link local
+       * address" field of the IPv4 instance's Link-LSA.  This address is
+       * placed in the first 32 bits of the "link local address" field and
+       * is used for IPv4 next-hop calculations.  The remaining bits MUST
+       * be set to zero.
+       */
+      ospf6_af_address_convert4to6 (&link_lsa->linklocal_addr,
+                                    oi->linklocal_addr_ipv4);
+    }
+  else
+    {
+      memcpy (&link_lsa->linklocal_addr, oi->linklocal_addr,
+              sizeof (struct in6_addr));
+    }
 
   op = (struct ospf6_prefix *)
     ((caddr_t) link_lsa + sizeof (struct ospf6_link_lsa));
@@ -856,6 +860,7 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
   struct ospf6_interface *oi;
   struct ospf6_neighbor *on;
   struct ospf6_route *route;
+  struct ospf6_route_table *route_advertise;
   struct ospf6_prefix *op;
   struct listnode *i, *j;
   int full_count = 0;
@@ -899,20 +904,7 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
     zlog_debug ("Originate Intra-Area-Prefix-LSA for area %s's stub prefix",
                oa->name);
 
-  /* prepare buffer */
-  memset (buffer, 0, sizeof (buffer));
-  lsa_header = (struct ospf6_lsa_header *) buffer;
-  intra_prefix_lsa = (struct ospf6_intra_prefix_lsa *)
-    ((caddr_t) lsa_header + sizeof (struct ospf6_lsa_header));
-
-  /* Fill Intra-Area-Prefix-LSA */
-  intra_prefix_lsa->ref_type = htons (OSPF6_LSTYPE_ROUTER);
-  intra_prefix_lsa->ref_id = htonl (0);
-  intra_prefix_lsa->ref_adv_router = oa->ospf6->router_id;
-
-  prefix_num = 0;
-  op = (struct ospf6_prefix *)
-    ((caddr_t) intra_prefix_lsa + sizeof (struct ospf6_intra_prefix_lsa));
+  route_advertise = ospf6_route_table_create (0, 0);
 
   for (ALL_LIST_ELEMENTS_RO (oa->if_list, i, oi))
     {
@@ -946,12 +938,16 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
       for (route = ospf6_route_head (oi->route_connected); route;
            route = ospf6_route_best_next (route))
         {
-          u_int8_t prefix_length;
+          struct ospf6_route *route_new;
+          u_int8_t prefix_length, prefix_options;
+
+          prefix_options = route->path.prefix_options;
 
 	  //RFC 2740 3.4.3.7 Bullet 5 --
           if (oi->type == OSPF6_IFTYPE_MDR ||
               oi->type == OSPF6_IFTYPE_POINTOMULTIPOINT)
 	    {
+	      prefix_options |= OSPF6_PREFIX_OPTION_LA;
 	      if (ospf6_af_is_ipv4 (oa->ospf6) && oa->ospf6->af_interop)
 		prefix_length = 32;
 	      else
@@ -962,15 +958,19 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
               prefix_length = route->prefix.prefixlen;
             }
 
-          if ((char *) op + sizeof (*op) +
-              OSPF6_PREFIX_SPACE (prefix_length) > buffer + sizeof (buffer))
-            {
-              zlog_warn ("Only including %u of %u prefixes in "
-                         "Intra-Area-Prefix-LSA for stub interface %s",
-                         prefix_num, oi->route_connected->count,
-                         oi->interface->name);
-              break;
-            }
+	  if (ospf6_af_validate_prefix (oa->ospf6, &route->prefix.u.prefix6,
+					route->prefix.prefixlen, false))
+	    {
+	      if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
+		{
+		  char buf[PREFIXSTRLEN];
+
+                  ospf6_prefix2str (oa->ospf6, &route->prefix,
+                                    buf, sizeof (buf));
+                  zlog_debug ("    ignore %s", buf);
+		}
+	      continue;
+	    }
 
           if (IS_OSPF6_DEBUG_ORIGINATE (INTRA_PREFIX))
             {
@@ -980,20 +980,56 @@ ospf6_intra_prefix_lsa_originate_stub (struct thread *thread)
               zlog_debug ("    include %s", buf);
             }
 
-          op->prefix_length = prefix_length;
-	  op->prefix_options = route->path.prefix_options;
-          op->prefix_options |= OSPF6_PREFIX_OPTION_LA;
-	  op->prefix_metric = htons (route->path.cost);
-	  memcpy (OSPF6_PREFIX_BODY (op), &route->prefix.u.prefix6,
-		  OSPF6_PREFIX_SPACE (op->prefix_length));
+          route_new = ospf6_route_copy (route);
+          route_new->prefix.prefixlen = prefix_length;
+          route_new->path.prefix_options = prefix_options;
           //must add mask application here because it was removed
           //in ospf6_interface.c, ospf6_interface_connected_route_update()
-          ospf6_prefix_apply_mask (op);
-	  op = OSPF6_PREFIX_NEXT (op);
-	  prefix_num++;
-          assert ((char *) op <= buffer + sizeof (buffer));
+          apply_mask (&route_new->prefix);
+
+          ospf6_route_add (route_new, route_advertise);
 	}
     }
+
+  /* prepare buffer */
+  memset (buffer, 0, sizeof (buffer));
+  lsa_header = (struct ospf6_lsa_header *) buffer;
+  intra_prefix_lsa = (struct ospf6_intra_prefix_lsa *)
+    ((caddr_t) lsa_header + sizeof (struct ospf6_lsa_header));
+
+  /* Fill Intra-Area-Prefix-LSA */
+  intra_prefix_lsa->ref_type = htons (OSPF6_LSTYPE_ROUTER);
+  intra_prefix_lsa->ref_id = htonl (0);
+  intra_prefix_lsa->ref_adv_router = oa->ospf6->router_id;
+
+  prefix_num = 0;
+  op = (struct ospf6_prefix *)
+    ((caddr_t) intra_prefix_lsa + sizeof (struct ospf6_intra_prefix_lsa));
+
+  for (route = ospf6_route_head (route_advertise); route;
+       route = ospf6_route_best_next (route))
+    {
+      if ((char *) op + sizeof (*op) +
+          OSPF6_PREFIX_SPACE (route->prefix.prefixlen) >
+          buffer + sizeof (buffer))
+        {
+          zlog_warn ("Only including %u of %u prefixes in "
+                     "Intra-Area-Prefix-LSA for stub interfaces",
+                     prefix_num, route_advertise->count);
+          break;
+        }
+
+      op->prefix_length = route->prefix.prefixlen;
+      op->prefix_options = route->path.prefix_options;
+      op->prefix_metric = htons (route->path.cost);
+      memcpy (OSPF6_PREFIX_BODY (op), &route->prefix.u.prefix6,
+              OSPF6_PREFIX_SPACE (op->prefix_length));
+      op = OSPF6_PREFIX_NEXT (op);
+      prefix_num++;
+      assert ((char *) op <= buffer + sizeof (buffer));
+    }
+
+  ospf6_route_table_delete (route_advertise);
 
   if (prefix_num == 0 && old)
     ospf6_lsa_purge (old);
@@ -1413,17 +1449,20 @@ __ospf6_intra_prefix_lsa_add (struct ospf6_lsa *lsa)
 	  zlog_debug ("route %s", buf);
 	}
 
-      for (i = 0; ospf6_nexthop_is_set (&ls_entry->nexthop[i]) &&
-	     i < OSPF6_MULTI_PATH_LIMIT; i++)
+      for (i = 0; i < OSPF6_MULTI_PATH_LIMIT &&
+             ospf6_nexthop_is_set (&ls_entry->nexthop[i]); i++)
 	{
 	  ospf6_nexthop_copy (&route->nexthop[i], &ls_entry->nexthop[i]);
 
 	  if (IS_OSPF6_DEBUG_EXAMIN (INTRA_PREFIX))
 	    {
 	      char nexthop[INET6_ADDRSTRLEN];
+              unsigned int ifindex;
 	      ospf6_addr2str (oa->ospf6, &route->nexthop[i].address,
 			      nexthop, sizeof (nexthop));
-	      zlog_debug ("  nexthop %s", nexthop);
+              ifindex = route->nexthop[i].ifindex;
+              zlog_debug ("  nexthop %s%%%s(%u)", nexthop,
+                          ifindex2ifname (ifindex), ifindex);
 	    }
 	}
 
@@ -1599,8 +1638,8 @@ __ospf6_intra_process_route_table (struct ospf6_route_table *route_table)
 	      int i;
 	      bool routablenexthop = true;
 
-	      for (i = 0; ospf6_nexthop_is_set (&route->nexthop[i]) &&
-		     i < OSPF6_MULTI_PATH_LIMIT; i++)
+	      for (i = 0; i < OSPF6_MULTI_PATH_LIMIT &&
+                     ospf6_nexthop_is_set (&route->nexthop[i]); i++)
 		{
                   struct prefix nexthop;
                   struct ospf6_route *nhroute;
@@ -1789,19 +1828,6 @@ ospf6_intra_route_calculation_connected (struct ospf6_area *oa)
 
 	  copy = ospf6_route_copy (route);
 	  apply_mask (&copy->prefix);
-
-	  copy->type = OSPF6_DEST_TYPE_NETWORK;
-
-	  copy->path.origin.type = 0;
-	  copy->path.origin.id = 0;
-	  copy->path.origin.adv_router = oa->ospf6->router_id;
-
-	  copy->path.area_id = oa->area_id;
-	  copy->path.type = OSPF6_PATH_TYPE_INTRA;
-	  copy->path.metric_type = 1;
-	  copy->path.cost = oi->cost;
-
-	  copy->nexthop[0].ifindex = oi->interface->ifindex;
 
 	  if (IS_OSPF6_DEBUG_EXAMIN (INTRA_PREFIX))
 	    {

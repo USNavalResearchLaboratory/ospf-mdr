@@ -29,45 +29,64 @@
 
 #include <netinet/in.h>
 
-struct zebra_rfc4938_linkmetrics {
+struct zebra_rfc4938_linkmetrics
+{
+  u_int32_t flags;
+#define RECEIVE_ONLY (1 << 0)
+
   u_int8_t  rlq;                /* 0-100 */
   u_int8_t  resource;           /* 0-100 */
   u_int16_t latency;            /* msec */
-  u_int16_t current_datarate;   /* kbps */
-  u_int16_t max_datarate;       /* kbps */
+  u_int64_t current_datarate;   /* kbps */
+  u_int64_t max_datarate;       /* kbps */
 };
+#define ZAPI_RFC4938_LINKMETRICS_LEN 24
 
-typedef struct zebra_linkmetrics {
-  u_int32_t ifindex;		     /* local interface index */
-  struct    in6_addr linklocal_addr; /* peer ipv6 link-local address */
+struct zebra_linkmetrics
+{
+  u_int32_t ifindex;         /* local interface index (if known) */
+  struct in_addr nbr_addr4;  /* peer ipv4 address (if known) */
+  struct in6_addr nbr_addr6; /* peer ipv6 link-local address (if known) */
   struct zebra_rfc4938_linkmetrics metrics; /* link metric values */
-} zebra_linkmetrics_t;
+};
+#define ZAPI_LINKMETRICS_LEN (24 + ZAPI_RFC4938_LINKMETRICS_LEN)
 
-typedef struct zebra_linkstatus {
-  u_int32_t ifindex;		     /* local interface index */
-  struct    in6_addr linklocal_addr; /* peer ipv6 link-local address */
-  u_int32_t status;
-} zebra_linkstatus_t;
+struct zebra_linkstatus
+{
+  u_int32_t ifindex;         /* local interface index (if known) */
+  struct in_addr nbr_addr4;  /* peer ipv4 address (if known) */
+  struct in6_addr nbr_addr6; /* peer ipv6 link-local address (if known) */
+  u_int8_t status;
+};
+#define ZAPI_LINKSTATUS_LEN 25
 
-typedef struct {
-  u_int32_t ifindex;		     /* local interface index */
-  struct    in6_addr linklocal_addr; /* peer ipv6 link-local address */
-} zebra_linkmetrics_rqst_t;
+struct zebra_linkmetrics_request
+{
+  u_int32_t ifindex;         /* local interface index (if known) */
+  struct in_addr nbr_addr4;  /* peer ipv4 address (if known) */
+  struct in6_addr nbr_addr6; /* peer ipv6 link-local address (if known) */
+};
+#define ZAPI_LINKMETRICS_REQUEST_LEN 24
 
 struct stream;
 
-void zebra_linkmetrics_logdebug (zebra_linkmetrics_t *linkmetrics);
-int zapi_write_linkmetrics (struct stream *s, zebra_linkmetrics_t *linkmetrics);
-int zapi_read_linkmetrics (zebra_linkmetrics_t *linkmetrics,
+void zebra_linkmetrics_logdebug (const struct zebra_linkmetrics *metrics);
+int zapi_write_linkmetrics (struct stream *s,
+                            const struct zebra_linkmetrics *metrics);
+int zapi_read_linkmetrics (struct zebra_linkmetrics *metrics,
 			   struct stream *s, u_short length);
 
-int zebra_linkstatus_string (char *str, size_t size, u_int32_t status);
-void zebra_linkstatus_logdebug (zebra_linkstatus_t *linkstatus);
+void zebra_linkstatus_logdebug (const struct zebra_linkstatus *status);
 
-int zapi_write_linkstatus (struct stream *s, zebra_linkstatus_t *linkstatus);
-int zapi_read_linkstatus (zebra_linkstatus_t *linkstatus,
+int zapi_write_linkstatus (struct stream *s,
+                           const struct zebra_linkstatus *status);
+int zapi_read_linkstatus (struct zebra_linkstatus *status,
 			  struct stream *s, u_short length);
-int zapi_read_linkmetrics_rqst (zebra_linkmetrics_rqst_t *metrics_rqst,
-				struct stream *s, u_short length);
+
+void zebra_linkmetrics_request_logdebug (const struct zebra_linkmetrics_request *request);
+int zapi_write_linkmetrics_request (struct stream *s,
+                                    const struct zebra_linkmetrics_request *request);
+int zapi_read_linkmetrics_request (struct zebra_linkmetrics_request *request,
+                                   struct stream *s, u_short length);
 
 #endif	/* _ZEBRA_LINKMETRICS_H_ */

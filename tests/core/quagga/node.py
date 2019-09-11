@@ -118,12 +118,37 @@ class QuaggaNode(pycore.nodes.LxcNode):
 
 STATEDIR=%s
 
-for f in /proc/sys/net/ipv4/conf/*/rp_filter; do
-    echo 0 > $f
-done
+IPV4_PARAM_ENABLE="forwarding"
+IPV4_PARAM_DISABLE="rp_filter send_redirects secure_redirects accept_redirects"
+
+IPV6_PARAM_ENABLE="forwarding"
+IPV6_PARAM_DISABLE="accept_redirects"
+
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+set_kernel_parameters()
+{
+    local pathprefix param val
+    pathprefix=$1
+    parameters=$2
+    val=$3
+
+    for param in $parameters; do
+        for f in $pathprefix/*/$param; do
+            echo $val > $f
+        done
+    done
+}
+
+set_kernel_parameters /proc/sys/net/ipv4/conf "$IPV4_PARAM_ENABLE" 1
+set_kernel_parameters /proc/sys/net/ipv4/conf "$IPV4_PARAM_DISABLE" 0
+
+set_kernel_parameters /proc/sys/net/ipv6/conf "$IPV6_PARAM_ENABLE" 1
+set_kernel_parameters /proc/sys/net/ipv6/conf "$IPV6_PARAM_DISABLE" 0
 
 waitfile()
 {
+    local fname
     fname=$1
 
     i=0

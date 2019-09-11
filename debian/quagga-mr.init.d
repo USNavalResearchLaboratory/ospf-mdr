@@ -19,7 +19,7 @@ C_PATH=/etc/quagga
 
 # Local Daemon selection may be done by using /etc/quagga/daemons.
 # See /usr/share/doc/quagga/README.Debian.gz for further information.
-DAEMONS="zebra bgpd ripd ripngd ospfd ospf6d isisd babeld" # keep zebra first!
+DAEMONS="zebra bgpd ripd ripngd ospfd ospf6d isisd babeld xpimd" # keep zebra first!
 
 # Print the name of the pidfile.
 pidfile()
@@ -76,13 +76,32 @@ start()
 	echo -n " $1"
 	if ! check_daemon $1; then return; fi
 
-	start-stop-daemon \
+        if echo $valgrind_daemons | grep -q "\<$1\>"; then
+            ulimit -c unlimited
+            : ${valgrind:=/usr/bin/valgrind}
+            : ${valgrind_logdir:=/var/log}
+	    valgrind_logfile="$valgrind_logdir/valgrind-$1.log"
+            if [ -e "$valgrind_logfile" ]; then
+                mv $valgrind_logfile \
+                   $valgrind_logfile.$(date -r $valgrind_logfile +%Y%m%d%H%M%S)
+            fi
+	    start-stop-daemon \
+		--start \
+		--pidfile=`pidfile $1` \
+		--exec $valgrind \
+		-- \
+		--log-file=$valgrind_logfile \
+		$valgrind_options \
+	        "$D_PATH/$1" \
+		`eval echo "$""$1""_options"`
+        else
+	    start-stop-daemon \
 		--start \
 		--pidfile=`pidfile $1` \
 		--exec "$D_PATH/$1" \
 		-- \
 		`eval echo "$""$1""_options"`
-		
+	fi
 }
 
 # Stop the daemon given in the parameter, printing its name to the terminal.
@@ -94,7 +113,11 @@ stop()
     else
 	PIDFILE=`pidfile $1`
 	PID=`cat $PIDFILE 2>/dev/null`
-	start-stop-daemon --stop --quiet --oknodo --exec "$D_PATH/$1"
+        if echo $valgrind_daemons | grep -q "\<$1\>"; then
+	    start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE
+        else
+	    start-stop-daemon --stop --quiet --oknodo --exec "$D_PATH/$1"
+        fi
 	#
 	#       Now we have to wait until $DAEMON has _really_ stopped.
 	#

@@ -173,73 +173,136 @@ zserv_linkmetrics_config_write (struct vty *vty)
 
 #endif	/* HAVE_LIBNLGENL */
 
-/* receive a link metrics update */
+/* Send a link metrics update to subscribed zclients
+ *
+ * If provided, skip the excluded client
+ */
 int
-zserv_linkmetrics (zebra_linkmetrics_t *linkmetrics)
+zserv_send_linkmetrics (struct zebra_linkmetrics *metrics,
+                        struct zserv *exclude_client)
 {
   struct listnode *node;
   struct zserv *client;
 
   if (IS_ZEBRA_DEBUG_EVENT)
     {
-      zlog_debug ("%s: received link metrics update", __func__);
-      zebra_linkmetrics_logdebug (linkmetrics);
+      zlog_debug ("%s: sending link metrics update", __func__);
+      zebra_linkmetrics_logdebug (metrics);
     }
 
   /* send to all subscribed clients */
   for (ALL_LIST_ELEMENTS_RO (zebrad.client_list, node, client))
-    if (client->linkmetrics_subscribed)
-      {
-	if (zapi_write_linkmetrics (client->obuf, linkmetrics))
-	  {
-	    zlog_warn ("%s: zapi_write_linkmetrics() failed for "
-		       "client on fd %d", __func__, client->sock);
-	    continue;
-	  }
+    {
+      /* skip an excluded client */
+      if (client == exclude_client)
+        continue;
 
-	if (zebra_server_send_message (client))
-	  zlog_warn ("%s: zebra_server_send_message() failed for "
-		     "client on fd %d", __func__, client->sock);
-      }
+      if (client->linkmetrics_subscribed)
+        {
+          if (zapi_write_linkmetrics (client->obuf, metrics))
+            {
+              zlog_warn ("%s: zapi_write_linkmetrics() failed for "
+                         "client on fd %d", __func__, client->sock);
+              continue;
+            }
+
+          if (zebra_server_send_message (client))
+            zlog_warn ("%s: zebra_server_send_message() failed for "
+                       "client on fd %d", __func__, client->sock);
+        }
+    }
 
   return 0;
 }
 
-/* receive a link status update */
+/* Send a link metrics request to subscribed zclients
+ *
+ * If provided, skip the excluded client
+ */
 int
-zserv_linkstatus (zebra_linkstatus_t *linkstatus)
+zserv_send_linkmetrics_request (struct zebra_linkmetrics_request *request,
+                                struct zserv *exclude_client)
 {
   struct listnode *node;
   struct zserv *client;
 
   if (IS_ZEBRA_DEBUG_EVENT)
     {
-      zlog_debug ("%s: received link status update", __func__);
-      zebra_linkstatus_logdebug (linkstatus);
+      zlog_debug ("%s: sending link metrics request", __func__);
+      zebra_linkmetrics_request_logdebug (request);
     }
 
   /* send to all subscribed clients */
   for (ALL_LIST_ELEMENTS_RO (zebrad.client_list, node, client))
-    if (client->linkmetrics_subscribed)
-      {
-	if (zapi_write_linkstatus (client->obuf, linkstatus))
-	  {
-	    zlog_warn ("%s: zapi_write_linkstatus() failed for "
-		       "client on fd %d", __func__, client->sock);
-	    continue;
-	  }
+    {
+      /* skip an excluded client */
+      if (client == exclude_client)
+        continue;
 
-	if (zebra_server_send_message (client))
-	  zlog_warn ("%s: zebra_server_send_message() failed for "
-		     "client on fd %d", __func__, client->sock);
-      }
+      if (client->linkmetrics_subscribed)
+        {
+          if (zapi_write_linkmetrics_request (client->obuf, request))
+            {
+              zlog_warn ("%s: zapi_write_linkmetrics_request() failed for "
+                         "client on fd %d", __func__, client->sock);
+              continue;
+            }
+
+          if (zebra_server_send_message (client))
+            zlog_warn ("%s: zebra_server_send_message() failed for "
+                       "client on fd %d", __func__, client->sock);
+        }
+    }
+
+  return 0;
+}
+
+
+/* Send a link status update to subscribed zclients
+ *
+ * If provided, skip the excluded client
+ */
+int
+zserv_send_linkstatus (struct zebra_linkstatus *status,
+                       struct zserv *exclude_client)
+{
+  struct listnode *node;
+  struct zserv *client;
+
+  if (IS_ZEBRA_DEBUG_EVENT)
+    {
+      zlog_debug ("%s: sending link status update", __func__);
+      zebra_linkstatus_logdebug (status);
+    }
+
+  /* send to all subscribed clients */
+  for (ALL_LIST_ELEMENTS_RO (zebrad.client_list, node, client))
+    {
+      /* skip an excluded client */
+      if (client == exclude_client)
+        continue;
+
+      if (client->linkmetrics_subscribed)
+        {
+          if (zapi_write_linkstatus (client->obuf, status))
+            {
+              zlog_warn ("%s: zapi_write_linkstatus() failed for "
+                         "client on fd %d", __func__, client->sock);
+              continue;
+            }
+
+          if (zebra_server_send_message (client))
+            zlog_warn ("%s: zebra_server_send_message() failed for "
+                       "client on fd %d", __func__, client->sock);
+        }
+    }
 
   return 0;
 }
 
 /* receive a linkmetrics subscribe/unsubscribe */
 int
-zserv_linkmetrics_subscribe (uint16_t cmd, struct zserv *client,
+zserv_recv_linkmetrics_subscribe (uint16_t cmd, struct zserv *client,
 			     uint16_t length)
 {
   int r = 0;
@@ -270,51 +333,84 @@ zserv_linkmetrics_subscribe (uint16_t cmd, struct zserv *client,
   return r;
 }
 
-/* Unserialize the Linkmetric Request structure */
-static int
-zserv_read_linkmetrics_rqst (zebra_linkmetrics_rqst_t *linkmetrics_rqst,
-			     struct stream *s, u_short length)
+/* receive a link metrics message from a zclient */
+int
+zserv_recv_linkmetrics (struct zserv *client, uint16_t length)
 {
-  if (length != sizeof (*linkmetrics_rqst))
+  int r;
+  struct zebra_linkmetrics metrics;
+
+  r = zapi_read_linkmetrics (&metrics, client->ibuf, length);
+  if (r)
     {
-      zlog_err ("%s: invalid length: %u", __func__, length);
-      return -1;
+      zlog_err ("%s: reading link metrics failed", __func__);
+      return r;
     }
-
-  linkmetrics_rqst->ifindex = stream_getl (s);
-
-  stream_get (&linkmetrics_rqst->linklocal_addr, s,
-              sizeof (linkmetrics_rqst->linklocal_addr));
 
   if (IS_ZEBRA_DEBUG_EVENT)
     {
-      char ipv6_s[INET6_ADDRSTRLEN];
-
-      inet_ntop(AF_INET6, &linkmetrics_rqst->linklocal_addr,
-		ipv6_s, sizeof (ipv6_s));
-      zlog_debug("%s: Received the followed LINKMETRICS request, "
-		 "ifindex=%d, ipv6 = %s",
-		 __func__, linkmetrics_rqst->ifindex, ipv6_s);
+      zlog_debug ("%s: received link metrics", __func__);
+      zebra_linkmetrics_logdebug (&metrics);
     }
 
-  return 0;
+  /* forward to subscribed zclients, but exclude sender */
+  zserv_send_linkmetrics (&metrics, client);
+
+  return r;
 }
 
-/* Receive a linkmetrics Request */
+/* receive a link metrics request message from a zclient */
 int
-zserv_linkmetrics_rqst (struct stream *s, uint16_t length)
+zserv_recv_linkmetrics_request (struct zserv *client, uint16_t length)
 {
-  int r = 0;
-  zebra_linkmetrics_rqst_t linkmetrics_rqst;
+  int r;
+  struct zebra_linkmetrics_request request;
 
-  bzero ((char *)&linkmetrics_rqst, sizeof (zebra_linkmetrics_rqst_t));
+  r = zapi_read_linkmetrics_request (&request, client->ibuf, length);
+  if (r)
+    {
+      zlog_err ("%s: reading link metrics request failed", __func__);
+      return r;
+    }
 
-  zserv_read_linkmetrics_rqst (&linkmetrics_rqst, s, length);
+  if (IS_ZEBRA_DEBUG_EVENT)
+    {
+      zlog_debug ("%s: received link metrics request", __func__);
+      zebra_linkmetrics_request_logdebug (&request);
+    }
 
 #ifdef HAVE_LIBNLGENL
-  /* Now send request to PPP/CVMI */
-  r = lmgenl_write ((lmm_rqst_msg_t *)&linkmetrics_rqst);
+  r = lmgenl_send_metrics_request (&request);
 #endif  /* HAVE_LIBNLGENL */
+
+  /* forward to subscribed zclients, but exclude sender */
+  zserv_send_linkmetrics_request (&request, client);
+
+  return r;
+}
+
+/* receive a link status update from a zclient */
+int
+zserv_recv_linkstatus (struct zserv *client, uint16_t length)
+{
+  int r;
+  struct zebra_linkstatus status;
+
+  r = zapi_read_linkstatus (&status, client->ibuf, length);
+  if (r)
+    {
+      zlog_err ("%s: reading link status failed", __func__);
+      return r;
+    }
+
+  if (IS_ZEBRA_DEBUG_EVENT)
+    {
+      zlog_debug ("%s: received link status", __func__);
+      zebra_linkstatus_logdebug (&status);
+    }
+
+  /* forward to subscribed zclients, but exclude sender */
+  zserv_send_linkstatus (&status, client);
 
   return r;
 }

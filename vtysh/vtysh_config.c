@@ -204,6 +204,18 @@ vtysh_config_parse_line (const char *line)
 	config = config_get (BGP_NODE, line);
       else if (strncmp (line, "router isis", strlen ("router isis")) == 0)
   	config = config_get (ISIS_NODE, line);
+      else if (strncmp (line, "router mfea", strlen ("router mfea")) == 0)
+  	config = config_get (MFEA_NODE, line);
+      else if (strncmp (line, "router igmp", strlen ("router igmp")) == 0)
+  	config = config_get (MLD6IGMP_NODE, line);
+      else if (strncmp (line, "router pim", strlen ("router pim")) == 0)
+  	config = config_get (PIM_NODE, line);
+      else if (strncmp (line, "router mfea6", strlen ("router mfea6")) == 0)
+  	config = config_get (MFEA_NODE, line);
+      else if (strncmp (line, "router mld6", strlen ("router mld6")) == 0)
+  	config = config_get (MLD6IGMP_NODE, line);
+      else if (strncmp (line, "router pim6", strlen ("router pim6")) == 0)
+  	config = config_get (PIM_NODE, line);
       else if (strncmp (line, "router bgp", strlen ("router bgp")) == 0)
 	config = config_get (BGP_NODE, line);
       else if (strncmp (line, "route-map", strlen ("route-map")) == 0)

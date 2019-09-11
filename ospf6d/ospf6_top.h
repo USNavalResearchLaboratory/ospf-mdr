@@ -76,11 +76,14 @@ struct ospf6
 
   bool af_interop;
   bool mdr_tlv_interop;
+
+  unsigned int auto_cost_reference_bandwidth; /* mbps */
 };
 
 #define OSPF6_DISABLED    0x01
 
 #define OSPF6_INSTANCE_ID 0
+#define OSPF6_AUTO_COST_REFERENCE_BANDWIDTH 100
 
 /* global pointer for OSPF top data structure */
 extern struct ospf6 *ospf6;

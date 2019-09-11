@@ -664,7 +664,7 @@ stream_put_ipv4 (struct stream *s, u_int32_t l)
 
 /* Put long word to the stream. */
 int
-stream_put_in_addr (struct stream *s, struct in_addr *addr)
+stream_put_in_addr (struct stream *s, const struct in_addr *addr)
 {
   STREAM_VERIFY_SANE(s);
   
@@ -682,7 +682,7 @@ stream_put_in_addr (struct stream *s, struct in_addr *addr)
 
 /* Put prefix by nlri type format. */
 int
-stream_put_prefix (struct stream *s, struct prefix *p)
+stream_put_prefix (struct stream *s, const struct prefix *p)
 {
   size_t psize;
   

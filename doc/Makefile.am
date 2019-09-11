@@ -51,7 +51,8 @@ quagga_TEXINFOS = appendix.texi babeld.texi basic.texi bgpd.texi filter.texi \
 	overview.texi protocol.texi ripd.texi ripngd.texi routemap.texi \
 	snmp.texi vtysh.texi routeserver.texi defines.texi $(figures_png) \
 	snmptrap.texi $(figures_txt) \
-	ospf6d-af.texi ospf6d-manet.texi
+	ospf6d-af.texi ospf6d-manet.texi \
+	mfea.texi mld6igmp.texi pim.texi xpimd.texi
 
 .png.eps:
 	$(PNGTOEPS) $< "$@"

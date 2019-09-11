@@ -1365,10 +1365,16 @@ zebra_client_read (struct thread *thread)
       break;
     case ZEBRA_LINKMETRICS_SUBSCRIBE:
     case ZEBRA_LINKMETRICS_UNSUBSCRIBE:
-      zserv_linkmetrics_subscribe (command, client, length);
+      zserv_recv_linkmetrics_subscribe (command, client, length);
       break;
-    case ZEBRA_LINKMETRICS_METRICS_RQST:
-      zserv_linkmetrics_rqst (client->ibuf, length);
+    case ZEBRA_LINKMETRICS_METRICS:
+      zserv_recv_linkmetrics (client, length);
+      break;
+    case ZEBRA_LINKMETRICS_STATUS:
+      zserv_recv_linkstatus (client, length);
+      break;
+    case ZEBRA_LINKMETRICS_METRICS_REQUEST:
+      zserv_recv_linkmetrics_request (client, length);
       break;
     case ZEBRA_HELLO:
       zread_hello (client);

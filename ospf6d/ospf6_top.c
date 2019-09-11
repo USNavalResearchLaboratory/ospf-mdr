@@ -165,6 +165,8 @@ ospf6_create (void)
   o->af_interop = true;
   o->mdr_tlv_interop = true;
 
+  o->auto_cost_reference_bandwidth = OSPF6_AUTO_COST_REFERENCE_BANDWIDTH;
+
   SET_FLAG (o->flag, OSPF6_DISABLED);
 
   return o;
@@ -708,6 +710,65 @@ DEFUN (no_ospf6_mdr_tlv_interoperability,
 }
 
 static void
+ospf6_set_auto_cost_reference_bandwidth (struct ospf6 *o, unsigned int refbw)
+{
+  struct listnode *node;
+  struct ospf6_area *oa;
+
+  if (refbw == o->auto_cost_reference_bandwidth)
+    return;                     /* no change */
+
+  o->auto_cost_reference_bandwidth = refbw;
+
+  for (ALL_LIST_ELEMENTS_RO (o->area_list, node, oa))
+    {
+      struct listnode *node2;
+      struct ospf6_interface *oi;
+
+      for (ALL_LIST_ELEMENTS_RO (oa->if_list, node2, oi))
+        {
+          ospf6_interface_update_bandwidth (oi);
+        }
+    }
+}
+
+DEFUN (ospf6_auto_cost_reference_bandwidth,
+       ospf6_auto_cost_reference_bandwidth_cmd,
+       "auto-cost reference-bandwidth <1-4294967>",
+       "Automatically assign interface costs\n"
+       "Reference bandwidth used for bandwidth-based interface costs\n"
+       "Bandwidth in Mbps")
+{
+  struct ospf6 *o;
+  unsigned int refbw;
+
+  o = (struct ospf6 *) vty->index;
+
+  refbw = strtol (argv[0], NULL, 10);
+  ospf6_set_auto_cost_reference_bandwidth (o, refbw);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf6_auto_cost_reference_bandwidth,
+       no_ospf6_auto_cost_reference_bandwidth_cmd,
+       "no auto-cost reference-bandwidth",
+       NO_STR
+       "Automatically assign interface costs\n"
+       "Reference bandwidth used for bandwidth-based interface costs\n")
+{
+  struct ospf6 *o;
+  unsigned int refbw;
+
+  o = (struct ospf6 *) vty->index;
+
+  refbw = OSPF6_AUTO_COST_REFERENCE_BANDWIDTH;
+  ospf6_set_auto_cost_reference_bandwidth (o, refbw);
+
+  return CMD_SUCCESS;
+}
+
+static void
 ospf6_show (struct vty *vty, struct ospf6 *o)
 {
   struct listnode *n;
@@ -936,6 +997,10 @@ config_write_ospf6 (struct vty *vty)
     vty_out (vty, " router-id %s%s", router_id, VNL);
   if (ospf6->instance_id != OSPF6_INSTANCE_ID)
     vty_out (vty, " instance-id %u%s", ospf6->instance_id, VNL);
+  if (ospf6->auto_cost_reference_bandwidth !=
+      OSPF6_AUTO_COST_REFERENCE_BANDWIDTH)
+    vty_out (vty, " auto-cost reference-bandwidth %u%s",
+             ospf6->auto_cost_reference_bandwidth, VNL);
 
   if (ospf6->min_lsa_arrival != MIN_LS_ARRIVAL)
     vty_out (vty, " min-lsa-arrival %u%s", ospf6->min_lsa_arrival, VNL);
@@ -1005,4 +1070,6 @@ ospf6_top_init (void)
   install_element (OSPF6_NODE, &no_ospf6_af_interoperability_cmd);
   install_element (OSPF6_NODE, &ospf6_mdr_tlv_interoperability_cmd);
   install_element (OSPF6_NODE, &no_ospf6_mdr_tlv_interoperability_cmd);
+  install_element (OSPF6_NODE, &ospf6_auto_cost_reference_bandwidth_cmd);
+  install_element (OSPF6_NODE, &no_ospf6_auto_cost_reference_bandwidth_cmd);
 }

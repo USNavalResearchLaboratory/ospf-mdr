@@ -1129,11 +1129,14 @@ DEFUN (bandwidth_if,
       return CMD_WARNING;
     }
   
-  ifp->bandwidth = bandwidth;
+  if (bandwidth != ifp->bandwidth)
+    {
+      ifp->bandwidth = bandwidth;
 
-  /* force protocols to recalculate routes due to cost change */
-  if (if_is_operative (ifp))
-    zebra_interface_up_update (ifp);
+      /* force protocols to recalculate routes due to cost change */
+      if (if_is_operative (ifp))
+        zebra_interface_up_update (ifp);
+    }
   
   return CMD_SUCCESS;
 }
@@ -1148,11 +1151,14 @@ DEFUN (no_bandwidth_if,
   
   ifp = (struct interface *) vty->index;
 
-  ifp->bandwidth = 0;
+  if (ifp->bandwidth != 0)
+    {
+      ifp->bandwidth = 0;
   
-  /* force protocols to recalculate routes due to cost change */
-  if (if_is_operative (ifp))
-    zebra_interface_up_update (ifp);
+      /* force protocols to recalculate routes due to cost change */
+      if (if_is_operative (ifp))
+        zebra_interface_up_update (ifp);
+    }
 
   return CMD_SUCCESS;
 }

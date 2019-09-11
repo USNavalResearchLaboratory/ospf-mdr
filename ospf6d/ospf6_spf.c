@@ -47,15 +47,30 @@
 unsigned char conf_debug_ospf6_spf = 0;
 
 static int
+uint32_cmp (u_int32_t a, u_int32_t b)
+{
+  if (a < b)
+    return -1;
+
+  if (a > b)
+    return 1;
+
+  return 0;
+}
+
+static int
 ospf6_vertex_cmp (void *a, void *b)
 {
   struct ospf6_vertex *va = (struct ospf6_vertex *) a;
   struct ospf6_vertex *vb = (struct ospf6_vertex *) b;
+  int cmp;
 
   /* ascending order */
-  if (va->cost != vb->cost)
-    return (va->cost - vb->cost);
-  return (va->hops - vb->hops);
+  cmp = uint32_cmp (va->cost, vb->cost);
+  if (cmp == 0)
+    cmp = uint32_cmp (va->hops, vb->hops);
+
+  return cmp;
 }
 
 static int
@@ -63,28 +78,31 @@ ospf6_vertex_id_cmp (void *a, void *b)
 {
   struct ospf6_vertex *va = (struct ospf6_vertex *) a;
   struct ospf6_vertex *vb = (struct ospf6_vertex *) b;
-  int ret = 0;
+  int cmp;
 
-  ret = ntohl (ospf6_linkstate_prefix_adv_router (&va->vertex_id)) -
-        ntohl (ospf6_linkstate_prefix_adv_router (&vb->vertex_id));
-  if (ret)
-    return ret;
+  cmp = uint32_cmp (ntohl (ospf6_linkstate_prefix_adv_router (&va->vertex_id)),
+                    ntohl (ospf6_linkstate_prefix_adv_router (&vb->vertex_id)));
+  if (cmp == 0)
+    {
+      cmp = uint32_cmp (ntohl (ospf6_linkstate_prefix_id (&va->vertex_id)),
+                        ntohl (ospf6_linkstate_prefix_id (&vb->vertex_id)));
+    }
 
-  ret = ntohl (ospf6_linkstate_prefix_id (&va->vertex_id)) -
-        ntohl (ospf6_linkstate_prefix_id (&vb->vertex_id));
-  return ret;
+  return cmp;
 }
 
 static void
 ospf6_spf_vertex_add_child (struct ospf6_vertex *parent,
 			    struct ospf6_vertex *child)
 {
-  struct listnode *node;
+  if (IS_OSPF6_DEBUG_SPF (PROCESS))
+    {
+      zlog_debug ("%s: adding vertex %s (%p) as child of %s (%p)",
+                  __func__, child->name, child, parent->name, parent);
+    }
 
   assert (child->parent == NULL);
-
-  node = listnode_lookup (parent->child_list, child);
-  assert (node == NULL);
+  assert (listnode_lookup (parent->child_list, child) == NULL);
 
   child->parent = parent;
   listnode_add_sort (parent->child_list, child);
@@ -95,6 +113,12 @@ ospf6_spf_vertex_del_child (struct ospf6_vertex *parent,
 			    struct ospf6_vertex *child)
 {
   struct listnode *node;
+
+  if (IS_OSPF6_DEBUG_SPF (PROCESS))
+    {
+      zlog_debug ("%s: deleting vertex %s (%p) as child of %s (%p)",
+                  __func__, child->name, child, parent->name, parent);
+    }
 
   assert (child->parent == parent);
 
@@ -144,6 +168,11 @@ ospf6_vertex_create (struct ospf6_lsa *lsa, struct ospf6_vertex *parent)
   v->child_list = list_new ();
   v->child_list->cmp = ospf6_vertex_id_cmp;
 
+  if (IS_OSPF6_DEBUG_SPF (PROCESS))
+    {
+      zlog_debug ("%s: created vertex %s (%p)", __func__, v->name, v);
+    }
+
   if (parent)
     ospf6_spf_vertex_add_child (parent, v);
 
@@ -154,6 +183,11 @@ static void
 ospf6_vertex_delete (struct ospf6_vertex *v)
 {
   struct listnode *head;
+
+  if (IS_OSPF6_DEBUG_SPF (PROCESS))
+    {
+      zlog_debug ("%s: deleting vertex %s (%p)", __func__, v->name, v);
+    }
 
   if (v->parent)
     ospf6_spf_vertex_del_child (v->parent, v);
@@ -401,8 +435,10 @@ ospf6_nexthop_cmp (const void *a, const void *b)
     return -1;
   else if (y_is_set && !x_is_set)
     return 1;
-  else if (x->ifindex != y->ifindex)
-    return x->ifindex - y->ifindex;
+  else if (x->ifindex < y->ifindex)
+    return -1;
+  else if (x->ifindex > y->ifindex)
+    return 1;
   else
     return memcmp (&x->address, &y->address, sizeof (x->address));
 }
@@ -473,8 +509,8 @@ ospf6_spf_install (struct ospf6_vertex *v,
 
       if (router_is_root)
         {
-          for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
-                 i < OSPF6_MULTI_PATH_LIMIT; i++)
+          for (i = 0; i < OSPF6_MULTI_PATH_LIMIT &&
+                 ospf6_nexthop_is_set (&v->nexthop[i]); i++)
             {
               int err;
 
@@ -532,8 +568,8 @@ ospf6_spf_install (struct ospf6_vertex *v,
 
   if (router_is_root)
     {
-      for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
-             i < OSPF6_MULTI_PATH_LIMIT; i++)
+      for (i = 0; i < OSPF6_MULTI_PATH_LIMIT &&
+             ospf6_nexthop_is_set (&v->nexthop[i]); i++)
         {
           ospf6_nexthop_copy (&route->nexthop[i], &v->nexthop[i]);
         }
@@ -761,8 +797,8 @@ ospf6_spf_calculation (u_int32_t router_id,
                 }
               else
                 {
-                  for (i = 0; ospf6_nexthop_is_set (&v->nexthop[i]) &&
-                         i < OSPF6_MULTI_PATH_LIMIT; i++)
+                  for (i = 0; i < OSPF6_MULTI_PATH_LIMIT &&
+                         ospf6_nexthop_is_set (&v->nexthop[i]); i++)
                     ospf6_nexthop_copy (&w->nexthop[i], &v->nexthop[i]);
                 }
             }

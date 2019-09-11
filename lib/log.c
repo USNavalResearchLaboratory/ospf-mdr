@@ -52,6 +52,11 @@ const char *zlog_proto_names[] =
   "OSPF6",
   "ISIS",
   "MASC",
+#ifdef QUAGGA_MULTICAST
+  "MFEA",
+  "MLD6IGMP",
+  "PIM",
+#endif  /* QUAGGA_MULTICAST */
   NULL,
 };
 
@@ -849,7 +854,7 @@ static const struct zebra_desc_table command_types[] = {
   DESC_ENTRY	(ZEBRA_LINKMETRICS_UNSUBSCRIBE),
   DESC_ENTRY	(ZEBRA_LINKMETRICS_METRICS),
   DESC_ENTRY	(ZEBRA_LINKMETRICS_STATUS),
-  DESC_ENTRY	(ZEBRA_LINKMETRICS_METRICS_RQST),
+  DESC_ENTRY	(ZEBRA_LINKMETRICS_METRICS_REQUEST),
 };
 #undef DESC_ENTRY
 

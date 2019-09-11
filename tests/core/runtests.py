@@ -26,11 +26,25 @@ import quagga.test
 
 QUAGGA_PATHS = ['/usr/lib/quagga']
 
+def setup_sys_path():
+    if '/usr/lib/python2.6/site-packages' in sys.path:
+        sys.path.append('/usr/local/lib/python2.6/site-packages')
+    if '/usr/lib64/python2.6/site-packages' in sys.path:
+        sys.path.append('/usr/local/lib64/python2.6/site-packages')
+    if '/usr/lib/python2.7/site-packages' in sys.path:
+        sys.path.append('/usr/local/lib/python2.7/site-packages')
+    if '/usr/lib64/python2.7/site-packages' in sys.path:
+        sys.path.append('/usr/local/lib64/python2.7/site-packages')
+
 def setup_path():
     path = os.environ['PATH'].split(':')
     for p in QUAGGA_PATHS:
         if p not in path and os.path.isdir(p):
             os.environ['PATH'] += ':' + p
+
+def setup():
+    setup_sys_path()
+    setup_path()
 
 __alltests = None
 def alltests():
@@ -89,7 +103,7 @@ def main():
     for a in args:
         sys.stderr.write('ignoring command line argument: \'%s\'\n' % a)
 
-    setup_path()
+    setup()
     r = unittest.TextTestRunner(verbosity = 2)
     s = suite(debug_wait = options.debug)
     r.run(s)

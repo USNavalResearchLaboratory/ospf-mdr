@@ -29,90 +29,122 @@
 #include "ospf6_area.h"
 #include "ospf6_af.h"
 
-enum {
-  OSPF6_AF_FAILED = 0,
-  OSPF6_AF_IPV6_UNICAST,
-  OSPF6_AF_IPV6_MULTICAST,
-  OSPF6_AF_IPV4_UNICAST,
-  OSPF6_AF_IPV4_MULTICAST,
-  OSPF6_AF_UNASSIGNED,
+enum
+{
+  OSPF6_AF_IPV6_UNICAST = 0,
+  OSPF6_AF_IPV6_MULTICAST = 0x20,
+  OSPF6_AF_IPV4_UNICAST = 0x40,
+  OSPF6_AF_IPV4_MULTICAST = 0x60,
+  OSPF6_AF_UNASSIGNED = 0x80,
 };
 
-static int
-ospf6_af_range (struct ospf6 *o)
+static bool
+af_is_ipv6_unicast (uint8_t instance_id)
 {
-  u_int8_t instance_id;
+  /* 0 <= instance_id < 32 */
+  return (instance_id & 0xe0) == 0;
+}
+
+static bool
+af_is_ipv6_multicast (uint8_t instance_id)
+{
+  /* 32 <= instance_id < 64 */
+  return (instance_id & 0xe0) == 0x20;
+}
+
+static bool
+af_is_ipv4_unicast (uint8_t instance_id)
+{
+  /* 64 <= instance_id < 96 */
+  return (instance_id & 0xe0) == 0x40;
+}
+
+static bool
+af_is_ipv4_multicast (uint8_t instance_id)
+{
+  /* 96 <= instance_id < 128 */
+  return (instance_id & 0xe0) == 0x60;
+}
+
+static bool
+af_is_unassigned (uint8_t instance_id)
+{
+  /* 128 <= instance_id <= 255 */
+  return (instance_id & 0x80) != 0;
+}
+
+static bool
+af_is_ipv6 (uint8_t instance_id)
+{
+  /* 0 <= instance_id < 64 */
+  return (instance_id & 0xc0) == 0;
+}
+
+static bool
+af_is_ipv4 (uint8_t instance_id)
+{
+  /* 64 <= instance_id < 128 */
+  return (instance_id & 0xc0) == 0x40;
+}
+
+static int
+ospf6_af_range (const struct ospf6 *o)
+{
+  uint8_t instance_id;
 
   instance_id = o->instance_id;
+  if (af_is_unassigned (instance_id))
+    {
+      zlog_warn ("%s: Error: OSPF Instance-ID %u is reserved",
+                 __func__, instance_id);
+      return OSPF6_AF_UNASSIGNED;
+    }
 
-  if (instance_id < 32)
-    return OSPF6_AF_IPV6_UNICAST;
-  else if (instance_id < 64)
-    return OSPF6_AF_IPV6_MULTICAST;
-  else if (instance_id < 96)
-    return OSPF6_AF_IPV4_UNICAST;
-  else if (instance_id < 128)
-    return OSPF6_AF_IPV4_MULTICAST;
-
-  zlog_warn ("%s: Error: OSPF Instance-ID %u is reserved",
-             __func__, instance_id);
-
-  return OSPF6_AF_UNASSIGNED;
+  return (instance_id & 0xe0);
 }
 
 bool
-ospf6_af_is_ipv6_unicast (struct ospf6 *o)
+ospf6_af_is_ipv6_unicast (const struct ospf6 *o)
 {
-  u_int8_t instance_id = o->instance_id;
-
-  return (instance_id < 32);
+  return af_is_ipv6_unicast (o->instance_id);
 }
 
 bool
-ospf6_af_is_ipv6_multicast (struct ospf6 *o)
+ospf6_af_is_ipv6_multicast (const struct ospf6 *o)
 {
-  u_int8_t instance_id = o->instance_id;
-
-  return (32 <= instance_id && instance_id < 64);
+  return af_is_ipv6_multicast (o->instance_id);
 }
 
 bool
-ospf6_af_is_ipv4_unicast (struct ospf6 *o)
+ospf6_af_is_ipv4_unicast (const struct ospf6 *o)
 {
-  u_int8_t instance_id = o->instance_id;
-
-  return (64 <= instance_id && instance_id < 96);
+  return af_is_ipv4_unicast (o->instance_id);
 }
 
 bool
-ospf6_af_is_ipv4_multicast (struct ospf6 *o)
+ospf6_af_is_ipv4_multicast (const struct ospf6 *o)
 {
-  u_int8_t instance_id = o->instance_id;
-
-  return (96 <= instance_id && instance_id < 128);
+  return af_is_ipv4_multicast (o->instance_id);
 }
 
 bool
-ospf6_af_is_ipv6 (struct ospf6 *o)
+ospf6_af_is_ipv6 (const struct ospf6 *o)
 {
-  u_int8_t instance_id = o->instance_id;
-
-  return (instance_id < 64);
+  return af_is_ipv6 (o->instance_id);
 }
 
 bool
-ospf6_af_is_ipv4 (struct ospf6 *o)
+ospf6_af_is_ipv4 (const struct ospf6 *o)
 {
-  u_int8_t instance_id = o->instance_id;
-
-  return (64 <= instance_id && instance_id < 128);
+  return af_is_ipv4 (o->instance_id);
 }
 
 /* convert an IPv6 address to IPv4 */
 int
-ospf6_af_address_convert6to4 (struct in_addr *addr4, struct in6_addr *addr6)
+ospf6_af_address_convert6to4 (struct in_addr *addr4,
+			      const struct in6_addr *addr6)
 {
-  uint32_t *a32 = (uint32_t *)addr6;
+  const uint32_t *a32 = (const uint32_t *)addr6;
 
   addr4->s_addr = 0;
 
@@ -129,7 +161,8 @@ ospf6_af_address_convert6to4 (struct in_addr *addr4, struct in6_addr *addr6)
 
 /* convert an IPv4 address to IPv6 */
 void
-ospf6_af_address_convert4to6 (struct in6_addr *addr6, struct in_addr *addr4)
+ospf6_af_address_convert4to6 (struct in6_addr *addr6,
+			      const struct in_addr *addr4)
 {
   uint32_t *a32 = (uint32_t *)addr6;
 
@@ -202,7 +235,7 @@ ospf6_af_prefixlen4to6 (unsigned int prefixlen)
 }
 
 unsigned int
-ospf6_af_prefixlen6 (struct ospf6 *o, unsigned int prefixlen6)
+ospf6_af_prefixlen6 (const struct ospf6 *o, unsigned int prefixlen6)
 {
   if (ospf6_af_is_ipv4 (o) &&
       ospf6_af_validate_prefixlen (OSPF6_AF_IPV4_UNICAST, prefixlen6) == 0)
@@ -213,7 +246,8 @@ ospf6_af_prefixlen6 (struct ospf6 *o, unsigned int prefixlen6)
 
 /* convert an IPv6 prefix to IPv4; prefixes cannot overlap */
 int
-ospf6_af_prefix_convert6to4 (struct prefix_ipv4 *p4, struct prefix_ipv6 *p6)
+ospf6_af_prefix_convert6to4 (struct prefix_ipv4 *p4,
+			     const struct prefix_ipv6 *p6)
 {
   int err;
   struct in_addr addr4;
@@ -232,7 +266,7 @@ ospf6_af_prefix_convert6to4 (struct prefix_ipv4 *p4, struct prefix_ipv6 *p6)
     {
       char buf[64];
 
-      prefix2str ((struct prefix *) p6, buf, sizeof (buf));
+      prefix2str ((const struct prefix *) p6, buf, sizeof (buf));
       zlog_warn ("%s: invalid ipv4 af address: %s", __func__, buf);
       return -1;
     }
@@ -250,7 +284,8 @@ ospf6_af_prefix_convert6to4 (struct prefix_ipv4 *p4, struct prefix_ipv6 *p6)
 
 /* convert an IPv4 prefix to IPv6; prefixes cannot overlap */
 int
-ospf6_af_prefix_convert4to6 (struct prefix_ipv6 *p6, struct prefix_ipv4 *p4)
+ospf6_af_prefix_convert4to6 (struct prefix_ipv6 *p6,
+			     const struct prefix_ipv4 *p4)
 {
   memset (p6, 0, sizeof (*p6));
 
@@ -268,7 +303,7 @@ ospf6_af_prefix_convert4to6 (struct prefix_ipv6 *p6, struct prefix_ipv4 *p4)
 }
 
 int
-ospf6_af_validate_ipv6_unicast (struct in6_addr *addr)
+ospf6_af_validate_ipv6_unicast (const struct in6_addr *addr)
 {
   if (IN6_IS_ADDR_LINKLOCAL (addr))
     return -1;
@@ -294,7 +329,7 @@ ospf6_af_validate_ipv6_unicast (struct in6_addr *addr)
 }
 
 int
-ospf6_af_validate_ipv6_multicast (struct in6_addr *addr)
+ospf6_af_validate_ipv6_multicast (const struct in6_addr *addr)
 {
   if (IN6_IS_ADDR_MC_GLOBAL (addr))
     return 0;
@@ -309,7 +344,7 @@ ospf6_af_validate_ipv6_multicast (struct in6_addr *addr)
 }
 
 int
-ospf6_af_validate_ipv4_unicast (struct in6_addr *addr)
+ospf6_af_validate_ipv4_unicast (const struct in6_addr *addr)
 {
   struct in_addr inaddr4;
   uint32_t addr4;
@@ -338,7 +373,7 @@ ospf6_af_validate_ipv4_unicast (struct in6_addr *addr)
 }
 
 int
-ospf6_af_validate_ipv4_multicast (struct in6_addr *addr)
+ospf6_af_validate_ipv4_multicast (const struct in6_addr *addr)
 {
   struct in_addr inaddr4;
   uint32_t addr4;
@@ -355,7 +390,7 @@ ospf6_af_validate_ipv4_multicast (struct in6_addr *addr)
 }
 
 int
-ospf6_af_validate_prefix (struct ospf6 *o, struct in6_addr *prefix,
+ospf6_af_validate_prefix (const struct ospf6 *o, const struct in6_addr *prefix,
 			  unsigned int prefixlen, bool allow_default)
 {
   int af_range, err;
@@ -397,10 +432,11 @@ ospf6_af_validate_prefix (struct ospf6 *o, struct in6_addr *prefix,
 }
 
 const char *
-ospf6_prefix2str (struct ospf6 *o, struct prefix *prefix,
+ospf6_prefix2str (const struct ospf6 *o, const struct prefix *prefix,
 		  char *buf, size_t bufsize)
 {
-  struct prefix tmp, *p = prefix;
+  struct prefix tmp;
+  const struct prefix *p = prefix;
   int err;
 
   if (ospf6_af_is_ipv4 (o))
@@ -408,7 +444,7 @@ ospf6_prefix2str (struct ospf6 *o, struct prefix *prefix,
       int err;
 
       err = ospf6_af_prefix_convert6to4 ((struct prefix_ipv4 *)&tmp,
-					 (struct prefix_ipv6 *)prefix);
+					 (const struct prefix_ipv6 *)prefix);
       if (err)
 	{
 	  char buf[PREFIXSTRLEN];
@@ -429,10 +465,10 @@ ospf6_prefix2str (struct ospf6 *o, struct prefix *prefix,
 }
 
 const char *
-ospf6_addr2str (struct ospf6 *o, struct in6_addr *addr,
+ospf6_addr2str (const struct ospf6 *o, const struct in6_addr *addr,
 		char *buf, size_t bufsize)
 {
-  void *src = addr;
+  const void *src = addr;
   int af = AF_INET6;
   struct in_addr addr4;
   const char *s;
@@ -463,7 +499,7 @@ ospf6_addr2str (struct ospf6 *o, struct in6_addr *addr,
 }
 
 const char *
-ospf6_addr2str6 (struct in6_addr *addr, char *buf, size_t bufsize)
+ospf6_addr2str6 (const struct in6_addr *addr, char *buf, size_t bufsize)
 {
   const char *s;
 
@@ -510,7 +546,8 @@ ospf6_str2id (const char *s, u_int32_t *id)
 }
 
 int
-ospf6_str2prefix (struct ospf6 *o, const char *str, struct prefix *prefix)
+ospf6_str2prefix (const struct ospf6 *o, const char *str,
+		  struct prefix *prefix)
 {
   int r;
 

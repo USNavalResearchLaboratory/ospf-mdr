@@ -114,7 +114,7 @@ ospf6_zebra_if_del (int command, struct zclient *zclient, zebra_size_t length)
   if (!(ifp = zebra_interface_state_read(zclient->ibuf)))
     return 0;
 
-  if (if_is_up (ifp))
+  if (if_is_operative (ifp))
     zlog_warn ("Zebra: got delete of %s, but interface is still up", ifp->name);
 
   if (IS_OSPF6_DEBUG_ZEBRA (RECV))
@@ -168,8 +168,20 @@ ospf6_zebra_if_address_update_add (int command, struct zclient *zclient,
 			   buf, sizeof (buf)), c->address->prefixlen);
 
   if (c->address->family == AF_INET6 || c->address->family == AF_INET)
-    //enable updating of IPv4 addresses when using AF
-    ospf6_interface_connected_route_update (c->ifp);
+    {
+      struct ospf6_interface *oi;
+      bool before, after;
+
+      oi = c->ifp->info;
+      before = oi && oi->area && ospf6_interface_has_linklocal_addr (oi);
+
+      ospf6_interface_connected_route_update (c->ifp);
+
+      after = oi && oi->area && ospf6_interface_has_linklocal_addr (oi);
+
+      if (after != before)
+        ospf6_interface_state_update (c->ifp);
+    }
 
   return 0;
 }
@@ -192,8 +204,22 @@ ospf6_zebra_if_address_update_delete (int command, struct zclient *zclient,
 			   buf, sizeof (buf)), c->address->prefixlen);
 
   if (c->address->family == AF_INET6 || c->address->family == AF_INET)
-    //enable updating of IPv4 addresses when using AF
-    ospf6_interface_connected_route_update (c->ifp);
+    {
+      struct ospf6_interface *oi;
+      bool before, after;
+
+      oi = c->ifp->info;
+      before = oi && oi->area && ospf6_interface_has_linklocal_addr (oi);
+
+      ospf6_interface_connected_route_update (c->ifp);
+
+      after = oi && oi->area && ospf6_interface_has_linklocal_addr (oi);
+
+      if (after != before)
+        ospf6_interface_state_update (c->ifp);
+    }
+
+  connected_free (c);
 
   return 0;
 }
@@ -459,8 +485,8 @@ __ospf6_zebra_route_update (ospf6_zebra_route_update_t update,
       p = &route->prefix;
     }
 
-  for (i = 0; ospf6_nexthop_is_set (&route->nexthop[i]) &&
-       i < OSPF6_MULTI_PATH_LIMIT; i++)
+  for (i = 0; i < OSPF6_MULTI_PATH_LIMIT &&
+         ospf6_nexthop_is_set (&route->nexthop[i]); i++)
     {
       /* nothing */
     }
@@ -526,6 +552,9 @@ __ospf6_zebra_route_update (ospf6_zebra_route_update_t update,
       size_t addrsize;
       bool directly_connected;
 
+      directly_connected = af_is_ipv4 &&
+        ospf6_route_directly_connected (&route->prefix, &route->nexthop[i]);
+
       if (!IN6_IS_ADDR_UNSPECIFIED (&route->nexthop[i].address))
         {
           if (af_is_ipv4)
@@ -560,9 +589,6 @@ __ospf6_zebra_route_update (ospf6_zebra_route_update_t update,
           addr = NULL;
           addrsize = 0;
         }
-
-      directly_connected = af_is_ipv4 &&
-        ospf6_route_directly_connected (p, &route->nexthop[i]);
 
       if (directly_connected || addr == NULL)
         {

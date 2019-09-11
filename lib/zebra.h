@@ -422,7 +422,7 @@ struct in_pktinfo
 #define ZEBRA_LINKMETRICS_UNSUBSCRIBE     25
 #define ZEBRA_LINKMETRICS_METRICS         26
 #define ZEBRA_LINKMETRICS_STATUS          27
-#define ZEBRA_LINKMETRICS_METRICS_RQST    28
+#define ZEBRA_LINKMETRICS_METRICS_REQUEST 28
 #define ZEBRA_MESSAGE_MAX                 29
 
 /* Marker value used in new Zserv, in the byte location corresponding

@@ -25,6 +25,16 @@
 
 #include <zebra.h>
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+#ifdef HAVE_SYS_TIME_H
+#include <sys/time.h>
+#endif
+#ifdef HAVE_RUSAGE
+#include <sys/resource.h>
+#endif
+
 struct rusage_t
 {
 #ifdef HAVE_RUSAGE
@@ -58,6 +68,7 @@ struct thread_master
   fd_set writefd;
   fd_set exceptfd;
   unsigned long alloc;
+  void *data;
 };
 
 typedef unsigned char thread_type;
@@ -80,6 +91,7 @@ struct thread
   RUSAGE_T ru;			/* Indepth usage info.  */
   struct cpu_thread_history *hist; /* cache pointer to cpu_history */
   char* funcname;
+  void *data;
 };
 
 struct cpu_thread_history 

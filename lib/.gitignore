@@ -5,6 +5,8 @@ Makefile.in
 *.la
 version.c
 version.h
+gitversion.h
+gitversion.h.tmp
 .deps
 .nfs*
 .libs
@@ -14,3 +16,4 @@ version.h
 *.loT
 memtypes.h
 route_types.h
+built.c

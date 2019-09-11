@@ -1,0 +1,14 @@
+[Unit]
+Description=Xpimd routing daemon
+BindTo=zebra.service
+After=syslog.target network.target zebra.service
+ConditionPathExists=/etc/quagga/xpimd.conf
+
+[Service]
+Type=forking
+EnvironmentFile=/etc/sysconfig/quagga
+ExecStart=/usr/sbin/xpimd -d $XPIMD_OPTS -f /etc/quagga/xpimd.conf
+Restart=on-abort
+
+[Install]
+WantedBy=network.target

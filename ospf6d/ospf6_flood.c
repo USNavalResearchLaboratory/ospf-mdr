@@ -216,10 +216,17 @@ ospf6_decrement_retrans_count (struct ospf6_lsa *lsa)
 }
 
 /* RFC2328 section 13.2 Installing LSAs in the database */
+/*
+ * NOTE: callers of ospf6_install_lsa() must first call
+ * ospf6_flood_clear() usually followed by ospf6_flood(), for example:
+ *
+ *     ospf6_flood_clear (old);
+ *     ospf6_flood (NULL, new);
+ *     ospf6_install_lsa (new);
+ */
 void
 ospf6_install_lsa (struct ospf6_lsa *lsa)
 {
-  struct ospf6_lsa *old;
   struct timeval now;
   bool is_maxage;
 
@@ -229,13 +236,8 @@ ospf6_install_lsa (struct ospf6_lsa *lsa)
 
   /* Remove the old instance from all neighbors' Link state
      retransmission list (RFC2328 13.2 last paragraph) */
-  old = ospf6_lsdb_lookup (lsa->header->type, lsa->header->id,
-                           lsa->header->adv_router, lsa->lsdb);
-  if (old)
-    {
-      THREAD_OFF (old->expire);
-      ospf6_flood_clear (old);
-    }
+  /* not done here because all callers of ospf6_install_lsa() must
+     have already called ospf6_flood_clear() */
 
   quagga_gettime (QUAGGA_CLK_MONOTONIC, &now);
   is_maxage = OSPF6_LSA_IS_MAXAGE (lsa);
@@ -1014,16 +1016,18 @@ ospf6_receive_lsa (struct ospf6_lsa_header *lsa_header,
       if (is_debug)
         zlog_debug ("Flood, Install, Possibly acknowledge the received LSA");
 
+      /* (c) Remove the current database copy from all neighbors' Link
+             state retransmission lists. */
+      /* note: do this before ospf6_flood() for implementation reasons */
+      if (old)
+        ospf6_flood_clear (old);
+
       /* (b) immediately flood and (c) remove from all retrans-list */
       /* Prevent self-originated LSA to be flooded. this is to make
       reoriginated instance of the LSA not to be rejected by other routers
       due to MinLSArrival. */
       if (new->header->adv_router != from->ospf6_if->area->ospf6->router_id)
         ospf6_flood (from, new);
-
-      /* (c) Remove the current database copy from all neighbors' Link
-             state retransmission lists. */
-      /* XXX, flood_clear ? */
 
       /* (d), installing lsdb, which may cause routing
               table calculation (replacing database copy) */

@@ -48,7 +48,7 @@
 struct ospf6_linkmetrics_formula {
   const char *vtyname;
   u_int16_t (*linkmetrics_cost)(struct ospf6_neighbor *,
-				struct zebra_linkmetrics *);
+				const struct zebra_linkmetrics *);
 };
 
 struct ospf6_linkmetrics_filter {
@@ -82,12 +82,8 @@ static unsigned int linkmetrics_nbrmetric_id;
 static unsigned int linkmetrics_neighbor_data_id;
 
 static void
-ospf6_linkstatus_update (struct ospf6_interface *oi,
-			 struct ospf6_neighbor *on,
-			 zebra_linkstatus_t *linkstatus);
-static void
 ospf6_linkmetrics_update (struct ospf6_neighbor *on,
-			  zebra_linkmetrics_t *linkmetrics);
+			  struct zebra_linkmetrics *metrics);
 static void
 ospf6_interface_config_write_linkmetrics (struct ospf6_interface *oi,
 					  struct vty *vty);
@@ -107,116 +103,102 @@ ospf6_interface_delete_linkmetrics (struct ospf6_interface *oi)
   struct ospf6_interface_linkmetrics *ilm;
 
   ilm = ospf6_interface_neighbor_metric_data (oi, linkmetrics_nbrmetric_id);
-  assert (ilm);
-
-  ospf6_remove_linkstatus_hook (ospf6_linkstatus_update);
-  ospf6_remove_linkmetrics_hook (ospf6_linkmetrics_update);
-
-  XFREE (MTYPE_OSPF6_IF, ilm);
+  if (ilm != NULL)
+    XFREE (MTYPE_OSPF6_IF, ilm);
 }
 
 /* Send a Linkmetrics request to zebra stream */
 static int
-ospf6_send_linkmetrics_rqst (struct zclient *zeb_client,
-                             zebra_linkmetrics_rqst_t *metrics_rqst)
+ospf6_send_linkmetrics_request (struct zclient *zeb_client,
+                                const struct zebra_linkmetrics_request *request)
 {
-  struct stream *s;
-  s = zeb_client->obuf;
+  int r;
 
-  /* initialize the stream */
-  stream_reset (s);
-  zclient_create_header (s, ZEBRA_LINKMETRICS_METRICS_RQST);
-
-  /* write the metrics_rqst structure */
-  stream_putl (s, metrics_rqst->ifindex);
-  stream_write (s, (u_char *)&metrics_rqst->linklocal_addr,
-                sizeof (metrics_rqst->linklocal_addr));
-
-  /* put length at beginning of stream */
-  if (stream_putw_at (s, 0, stream_get_endp (s)) != 2)
-      zlog_err ("%s: stream_putw_at() failed for setting length", __func__);
+  r = zapi_write_linkmetrics_request (zeb_client->obuf, request);
+  if (r)
+    {
+      zlog_warn ("%s: zapi_write_linkmetrics_request() failed", __func__);
+      return r;
+    }
 
   return zclient_send_message (zeb_client);
 }
 
 /* Build a request for Linkmetrics info and send it to Zebra */
 static void
-ospf6_zebra_linkmetrics_rqst (struct ospf6_neighbor *on)
+ospf6_zebra_linkmetrics_request (struct ospf6_neighbor *on)
 {
-  zebra_linkmetrics_rqst_t msg;
+  struct zebra_linkmetrics_request request = {
+    .ifindex = on->ospf6_if->interface->ifindex,
+    .nbr_addr6 = on->linklocal_addr,
+  };
 
-  msg.ifindex = on->ospf6_if->interface->ifindex;
-  memcpy (&msg.linklocal_addr, &on->linklocal_addr, sizeof (struct in6_addr));
-
-  if (IS_OSPF6_DEBUG_ZEBRA (RECV))
+  if (IS_OSPF6_DEBUG_ZEBRA (SEND))
     {
-      char ipv6_s[INET6_ADDRSTRLEN];
-
-      ospf6_addr2str6 (&msg.linklocal_addr, ipv6_s, sizeof (ipv6_s));
-      zlog_debug ("%s: Build a request for LINKMETRICS Info,"
-		  " ifindex=%d, ipv6 = %s", __func__, msg.ifindex, ipv6_s);
+      zlog_debug ("%s: sending link metrics request", __func__);
+      zebra_linkmetrics_request_logdebug (&request);
     }
 
-  ospf6_send_linkmetrics_rqst (zclient, &msg);
+  ospf6_send_linkmetrics_request (zclient, &request);
 }
 
 static int
 ospf6_linkmetrics_filter_adjustvalues (struct ospf6_neighbor *on,
-				       struct zebra_linkmetrics *linkmetrics)
+				       struct zebra_linkmetrics *metrics)
 {
-  if (linkmetrics->metrics.resource > 100)
+  if (metrics->metrics.resource > 100)
     {
       zlog_warn ("%s: overriding invalid link metric resource value: "
-		 "%u -> 100", __func__, linkmetrics->metrics.resource);
-      linkmetrics->metrics.resource = 100;
+		 "%u -> 100", __func__, metrics->metrics.resource);
+      metrics->metrics.resource = 100;
     }
 
-  if (linkmetrics->metrics.rlq > 100)
+  if (metrics->metrics.rlq > 100)
     {
       zlog_warn ("%s: overriding invalid link metric rlq value: "
-		 "%u -> 100", __func__, linkmetrics->metrics.rlq);
-      linkmetrics->metrics.rlq = 100;
+		 "%u -> 100", __func__, metrics->metrics.rlq);
+      metrics->metrics.rlq = 100;
     }
 
-  if (linkmetrics->metrics.current_datarate >
-      linkmetrics->metrics.max_datarate)
+  if (metrics->metrics.current_datarate > metrics->metrics.max_datarate)
     {
-      u_int16_t cdr = linkmetrics->metrics.current_datarate;
+      u_int64_t cdr = metrics->metrics.current_datarate;
 
       /* assume the current datarate value is more correct */
       zlog_warn ("%s: overriding invalid link metric datarate values: "
-		 "(current, max) = (%u, %u) -> (%u, %u)", __func__,
-		 cdr, linkmetrics->metrics.max_datarate, cdr, cdr);
-      linkmetrics->metrics.max_datarate = cdr;
+		 "(current, max) = (%" PRIu64 ", %" PRIu64 ") "
+                 "-> (%" PRIu64 ", %" PRIu64 ")", __func__,
+		 cdr, metrics->metrics.max_datarate, cdr, cdr);
+      metrics->metrics.max_datarate = cdr;
     }
 
   return 0;
 }
 
 static int
-ospf6_linkmetrics_validate (zebra_linkmetrics_t *linkmetrics)
+ospf6_linkmetrics_validate (const struct zebra_linkmetrics *metrics)
 {
-  if (linkmetrics->metrics.resource > 100)
+  if (metrics->metrics.resource > 100)
     {
       zlog_err ("%s: invalid link metric resource value: %u",
-		__func__, linkmetrics->metrics.resource);
+		__func__, metrics->metrics.resource);
       return -1;
     }
 
-  if (linkmetrics->metrics.rlq > 100)
+  if (metrics->metrics.rlq > 100)
     {
       zlog_err ("%s: invalid link metric rlq value: %u",
-		__func__, linkmetrics->metrics.rlq);
+		__func__, metrics->metrics.rlq);
       return -1;
     }
 
-  if (linkmetrics->metrics.current_datarate >
-      linkmetrics->metrics.max_datarate)
+  if (metrics->metrics.current_datarate >
+      metrics->metrics.max_datarate)
     {
       zlog_err ("%s: invalid link metric datarate values: "
-		"current = %u; max = %u", __func__,
-		linkmetrics->metrics.current_datarate,
-		linkmetrics->metrics.max_datarate);
+		"current = %" PRIu64 "; max = %" PRIu64, __func__,
+		metrics->metrics.current_datarate,
+		metrics->metrics.max_datarate);
       return -1;
     }
 
@@ -225,7 +207,7 @@ ospf6_linkmetrics_validate (zebra_linkmetrics_t *linkmetrics)
 
 static void
 ospf6_linkmetrics_update (struct ospf6_neighbor *on,
-			  zebra_linkmetrics_t *linkmetrics)
+                          struct zebra_linkmetrics *metrics)
 {
   struct ospf6_interface_linkmetrics *ilm;
   struct ospf6_neighbor_linkmetrics *nlm;
@@ -234,14 +216,19 @@ ospf6_linkmetrics_update (struct ospf6_neighbor *on,
   int err;
 
   ilm = ospf6_interface_neighbor_metric_data (oi, linkmetrics_nbrmetric_id);
-  assert (ilm);
-
-  if (!ilm->linkmetrics_formula)
+  if (ilm == NULL || !ilm->linkmetrics_formula)
     {
       if (IS_OSPF6_DEBUG_ZEBRA (RECV))
-	zlog_debug ("%s: ignoring link metrics update for interface %s: "
-		    "no linkmetrics formula enabled",
-		    __func__, oi->interface->name);
+        {
+          char router_id[16];
+
+          ospf6_id2str (on->router_id, router_id, sizeof (router_id));
+          zlog_debug ("%s: ignoring link metrics update for "
+                      "neighbor %s on interface %s: "
+                      "no linkmetrics formula enabled",
+                      __func__, router_id, oi->interface->name);
+        }
+
       return;
     }
 
@@ -252,11 +239,11 @@ ospf6_linkmetrics_update (struct ospf6_neighbor *on,
   nlm->numupdates++;
   quagga_gettime (QUAGGA_CLK_MONOTONIC, &nlm->last_update);
   /* save raw values */
-  nlm->last_metrics = linkmetrics->metrics;
+  nlm->last_metrics = metrics->metrics;
 
   if (ilm->linkmetrics_filter)
     {
-      err = ilm->linkmetrics_filter->filter (on, linkmetrics);
+      err = ilm->linkmetrics_filter->filter (on, metrics);
       if (err)
 	{
 	  if (IS_OSPF6_DEBUG_ZEBRA (RECV))
@@ -264,22 +251,22 @@ ospf6_linkmetrics_update (struct ospf6_neighbor *on,
 	      zlog_debug ("%s: link metrics update for neighbor %s "
 			  "suppressed by filter %s:", __func__,
 			  on->name, ilm->linkmetrics_filter->vtyname);
-	      zebra_linkmetrics_logdebug (linkmetrics);
+	      zebra_linkmetrics_logdebug (metrics);
 	    }
 	  return;
 	}
     }
 
-  err = ospf6_linkmetrics_validate (linkmetrics);
+  err = ospf6_linkmetrics_validate (metrics);
   if (err)
     {
       zlog_warn ("%s: invalid link metrics update for neighbor %s:",
 		 __func__, on->name);
-      zebra_linkmetrics_logdebug (linkmetrics);
+      zebra_linkmetrics_logdebug (metrics);
       return;
     }
 
-  newcost = ilm->linkmetrics_formula->linkmetrics_cost (on, linkmetrics);
+  newcost = ilm->linkmetrics_formula->linkmetrics_cost (on, metrics);
   if (newcost == 0)
     {
       zlog_warn ("%s: link metrics cost formula %s "
@@ -293,7 +280,7 @@ ospf6_linkmetrics_update (struct ospf6_neighbor *on,
 		__func__, on->name, newcost);
 
   /* save effective (filtered) values */
-  nlm->metrics = linkmetrics->metrics;
+  nlm->metrics = metrics->metrics;
 
   err = ospf6_interface_update_neighbor_metric (on, newcost,
 						linkmetrics_nbrmetric_id);
@@ -302,99 +289,9 @@ ospf6_linkmetrics_update (struct ospf6_neighbor *on,
 	      "for neighbor %s", __func__, on->name);
 }
 
-/*
- * Send a hello now, without waiting for hello interval.  Used to find
- * neighbors that just came up
- */
-static void
-ospf6_send_hello_now (struct ospf6_interface *oi)
-{
-    /* Stop hello timer thread */
-    THREAD_OFF (oi->thread_send_hello);
-
-    /* Start ospf_hello_send thread to send immediate hello message on
-       the interface and in turn activate the hello timer mechanism
-       for future polls */
-    oi->thread_send_hello = thread_add_event (master, ospf6_hello_send, oi, 0);
-}
-
-static void
-ospf6_linkstatus_update (struct ospf6_interface *oi,
-			 struct ospf6_neighbor *on,
-			 zebra_linkstatus_t *linkstatus)
-{
-  struct ospf6_interface_linkmetrics *ilm;
-
-  ilm = ospf6_interface_neighbor_metric_data (oi, linkmetrics_nbrmetric_id);
-  assert (ilm);
-
-  if (!ilm->linkmetrics_formula)
-    {
-      if (IS_OSPF6_DEBUG_ZEBRA (RECV))
-	{
-	  char statusstr[40], lladdrstr[INET6_ADDRSTRLEN];
-
-	  zebra_linkstatus_string (statusstr, sizeof (statusstr),
-				   linkstatus->status);
-	  ospf6_addr2str6 (&linkstatus->linklocal_addr,
-			   lladdrstr, sizeof (lladdrstr));
-	  zlog_debug ("%s: ignoring link status update on interface %s "
-		      "from %s: %s: no linkmetrics formula enabled",
-		      __func__, oi->interface->name, lladdrstr, statusstr);
-	}
-
-      return;
-    }
-
-  switch (linkstatus->status)
-    {
-    case LM_STATUS_UP:
-      if (conf_debug_ospf6_zebra)
-	{
-	  char statusstr[40], lladdrstr[INET6_ADDRSTRLEN];
-
-	  zebra_linkstatus_string (statusstr, sizeof (statusstr),
-				   linkstatus->status);
-	  ospf6_addr2str6 (&linkstatus->linklocal_addr,
-			   lladdrstr, sizeof (lladdrstr));
-	  zlog_debug ("%s: Expediting Hello mechanism due to reception of "
-		      "link status UP message on interface %s from %s: %s",
-		      __func__, oi->interface->name, lladdrstr, statusstr);
-	}
-
-      /* Expedite the Hello mechanism to find the new neighbor that
-	 just came up */
-      if (on == NULL)
-	ospf6_send_hello_now (oi);
-      break;
-
-    case LM_STATUS_DOWN:
-      if (conf_debug_ospf6_zebra)
-	zlog_debug ("%s: removing neighbor %s: link status down",
-		    __func__, on->name);
-      THREAD_OFF (on->inactivity_timer);
-      thread_add_event (master, inactivity_timer, on, 0);
-      break;
-
-    default:
-      {
-	char statusstr[40], lladdrstr[INET6_ADDRSTRLEN];
-
-	zebra_linkstatus_string (statusstr, sizeof (statusstr),
-				 linkstatus->status);
-	ospf6_addr2str6 (&linkstatus->linklocal_addr,
-			 lladdrstr, sizeof (lladdrstr));
-	zlog_err ("%s: ignoring link status for neighbor %s "
-		  "on interface %s from %s: %s", __func__, on->name,
-		  oi->interface->name, lladdrstr, statusstr);
-      }
-      break;
-    }
-}
-
 static u_int16_t
 ospf6_linkmetrics_formula_cisco (struct ospf6_neighbor *on,
-				 zebra_linkmetrics_t *linkmetrics)
+				 const struct zebra_linkmetrics *metrics)
 {
   u_int16_t newcost;
   struct ospf6_interface *oi = on->ospf6_if;
@@ -410,9 +307,9 @@ ospf6_linkmetrics_formula_cisco (struct ospf6_neighbor *on,
     http://www.cisco.com/en/US/docs/ios/ipmobility/configuration/guide/imo_adhoc_rtr2rd_ps6441_TSD_Products_Configuration_Guide_Chapter.html
   */
 
-  if (linkmetrics->metrics.max_datarate)
+  if (metrics->metrics.max_datarate)
     {
-      oc = 1e5 / (double)linkmetrics->metrics.max_datarate;
+      oc = 1e5 / (double)metrics->metrics.max_datarate;
     }
   else
     {
@@ -420,13 +317,12 @@ ospf6_linkmetrics_formula_cisco (struct ospf6_neighbor *on,
       oc = (double)oi->cost;
     }
 
-  if (linkmetrics->metrics.max_datarate &&
-      linkmetrics->metrics.current_datarate)
+  if (metrics->metrics.max_datarate && metrics->metrics.current_datarate)
     {
       bw = ((65536.0 *
 	     (100.0 -
-	      (100.0 * ((double)linkmetrics->metrics.current_datarate /
-			(double)linkmetrics->metrics.max_datarate)))) / 100.0) *
+	      (100.0 * ((double)metrics->metrics.current_datarate /
+			(double)metrics->metrics.max_datarate)))) / 100.0) *
 	((double)ilm->throughput_weight / 100.0);
     }
   else
@@ -436,11 +332,11 @@ ospf6_linkmetrics_formula_cisco (struct ospf6_neighbor *on,
       bw = 0.0;
     }
 
-  if (linkmetrics->metrics.resource)
+  if (metrics->metrics.resource)
     {
       long tmp;
 
-      tmp = (100 - linkmetrics->metrics.resource);
+      tmp = (100 - metrics->metrics.resource);
       res = ((double)(tmp * tmp * tmp) * 65536.0 / 1e6) *
 	(double)ilm->resources_weight / 100.0;
     }
@@ -450,20 +346,21 @@ ospf6_linkmetrics_formula_cisco (struct ospf6_neighbor *on,
       res = 0.0;
     }
 
-  if (linkmetrics->metrics.latency)
+  if (metrics->metrics.latency)
     {
-      lat = (double)linkmetrics->metrics.latency *
+      lat = (double)metrics->metrics.latency *
 	(double)ilm->latency_weight / 100.0;
     }
   else
     {
-      zlog_warn ("%s: link metrics latency is zero", __func__);
+      if (IS_OSPF6_DEBUG_ZEBRA (RECV))
+        zlog_debug ("%s: link metrics latency is zero", __func__);
       lat = 0.0;
     }
 
-  if (linkmetrics->metrics.rlq)
+  if (metrics->metrics.rlq)
     {
-      l2 = ((double)(100 - linkmetrics->metrics.rlq) * 65536.0 / 100.0) *
+      l2 = ((double)(100 - metrics->metrics.rlq) * 65536.0 / 100.0) *
 	(double)ilm->l2_factor_weight / 100.0;
     }
   else
@@ -485,7 +382,7 @@ ospf6_linkmetrics_formula_cisco (struct ospf6_neighbor *on,
 		"oc = %0.2f; bw = %0.2f; res = %0.2f; lat = %0.2f; l2 = %0.2f",
 		__func__, on->name, cost, oc, bw, res, lat, l2);
       zlog_err ("%s: input link metrics for invalid cost:", __func__);
-      zebra_linkmetrics_logdebug (linkmetrics);
+      zebra_linkmetrics_logdebug (metrics);
       zlog_err ("%s: weights used for invalid cost: %u %u %u %u",
 		__func__, ilm->throughput_weight, ilm->resources_weight,
 		ilm->latency_weight, ilm->l2_factor_weight);
@@ -505,7 +402,7 @@ ospf6_linkmetrics_formula_cisco (struct ospf6_neighbor *on,
 
 static u_int16_t
 ospf6_linkmetrics_formula_nrlcable (struct ospf6_neighbor *on,
-				    zebra_linkmetrics_t *linkmetrics)
+				    const struct zebra_linkmetrics *metrics)
 {
   u_int16_t newcost;
   struct ospf6_interface *oi = on->ospf6_if;
@@ -528,10 +425,10 @@ ospf6_linkmetrics_formula_nrlcable (struct ospf6_neighbor *on,
     cost = lat_cost + cdr_cost
   */
 
-  if (linkmetrics->metrics.current_datarate)
+  if (metrics->metrics.current_datarate)
     {
       cdr_cost = max_cost *
-	exp (-1.0 * cdr_steepness * (double)linkmetrics->metrics.current_datarate) *
+	exp (-1.0 * cdr_steepness * (double)metrics->metrics.current_datarate) *
 	(double)ilm->throughput_weight / 100.0;
     }
   else
@@ -540,15 +437,16 @@ ospf6_linkmetrics_formula_nrlcable (struct ospf6_neighbor *on,
       cdr_cost = 0.0;
     }
 
-  if (linkmetrics->metrics.latency)
+  if (metrics->metrics.latency)
     {
       lat_cost = max_cost *
-	(1.0 - exp (-1.0 * lat_steepness * (double)linkmetrics->metrics.latency)) *
+	(1.0 - exp (-1.0 * lat_steepness * (double)metrics->metrics.latency)) *
 	(double)ilm->latency_weight / 100.0;
     }
   else
     {
-      zlog_warn ("%s: link metrics latency is zero", __func__);
+      if (IS_OSPF6_DEBUG_ZEBRA (RECV))
+        zlog_debug ("%s: link metrics latency is zero", __func__);
       lat_cost = 0.0;
     }
 
@@ -565,7 +463,7 @@ ospf6_linkmetrics_formula_nrlcable (struct ospf6_neighbor *on,
 		"cdr_cost = %0.2f; lat_cost = %0.2f",
 		__func__, on->name, cost, cdr_cost, lat_cost);
       zlog_err ("%s: input link metrics for invalid cost:", __func__);
-      zebra_linkmetrics_logdebug (linkmetrics);
+      zebra_linkmetrics_logdebug (metrics);
       zlog_err ("%s: weights used for invalid cost: %u %u %u %u",
 		__func__, ilm->throughput_weight, ilm->resources_weight,
 		ilm->latency_weight, ilm->l2_factor_weight);
@@ -693,23 +591,6 @@ DEFUN (ipv6_ospf6_linkmetrics_formula,
     {
       struct listnode *node;
       struct ospf6_neighbor *on;
-      int err;
-
-      ospf6_remove_linkstatus_hook (ospf6_linkstatus_update);
-      err = ospf6_add_linkstatus_hook (ospf6_linkstatus_update);
-      if (err)
-	{
-	  vty_out (vty, "error adding link status callback%s", VNL);
-	  return CMD_WARNING;
-	}
-
-      ospf6_remove_linkmetrics_hook (ospf6_linkmetrics_update);
-      err = ospf6_add_linkmetrics_hook (ospf6_linkmetrics_update);
-      if (err)
-	{
-	  vty_out (vty, "error adding link metrics update callback%s", VNL);
-	  return CMD_WARNING;
-	}
 
       ilm->linkmetrics_formula = formula;
 
@@ -724,9 +605,9 @@ DEFUN (ipv6_ospf6_linkmetrics_formula,
 	      nlm->metrics.latency || nlm->metrics.current_datarate ||
 	      nlm->metrics.max_datarate)
 	    {
-	      zebra_linkmetrics_t linkmetrics = {
+	      struct zebra_linkmetrics linkmetrics = {
 		.ifindex = oi->interface->ifindex,
-		.linklocal_addr = on->linklocal_addr,
+		.nbr_addr6 = on->linklocal_addr,
 		.metrics = nlm->metrics,
 	      };
 
@@ -734,7 +615,7 @@ DEFUN (ipv6_ospf6_linkmetrics_formula,
 	    }
 	  else
 	    {
-	      ospf6_zebra_linkmetrics_rqst (on);
+	      ospf6_zebra_linkmetrics_request (on);
 	    }
 	}
     }
@@ -773,11 +654,7 @@ DEFUN (no_ipv6_ospf6_linkmetrics_formula,
 
   if (ilm->linkmetrics_formula)
     {
-      ospf6_remove_linkstatus_hook (ospf6_linkstatus_update);
-      ospf6_remove_linkmetrics_hook (ospf6_linkmetrics_update);
-
       ilm->linkmetrics_formula = NULL;
-
       ospf6_interface_reset_neighbor_metric (oi, linkmetrics_nbrmetric_id);
     }
 
@@ -998,9 +875,9 @@ ospf6_show_neighbor_linkmetrics (struct vty *vty, struct ospf6_neighbor *on,
 	   nlm->last_metrics.resource, VNL);
   vty_out (vty, "    latency:          %u%s",
 	   nlm->last_metrics.latency, VNL);
-  vty_out (vty, "    current datarate: %u%s",
+  vty_out (vty, "    current datarate: %" PRIu64 "%s",
 	   nlm->last_metrics.current_datarate, VNL);
-  vty_out (vty, "    max datarate:     %u%s",
+  vty_out (vty, "    max datarate:     %" PRIu64 "%s",
 	   nlm->last_metrics.max_datarate, VNL);
 
   vty_out (vty, "  current effective values:%s", VNL);
@@ -1010,9 +887,9 @@ ospf6_show_neighbor_linkmetrics (struct vty *vty, struct ospf6_neighbor *on,
 	   nlm->metrics.resource, VNL);
   vty_out (vty, "    latency:          %u%s",
 	   nlm->metrics.latency, VNL);
-  vty_out (vty, "    current datarate: %u%s",
+  vty_out (vty, "    current datarate: %" PRIu64 "%s",
 	   nlm->metrics.current_datarate, VNL);
-  vty_out (vty, "    max datarate:     %u%s",
+  vty_out (vty, "    max datarate:     %" PRIu64 "%s",
 	   nlm->metrics.max_datarate, VNL);
 }
 
@@ -1131,12 +1008,14 @@ ospf6_neighbor_state_change_linkmetrics (struct ospf6_neighbor *on,
      linkmetrics information from zebra and subsequent ppp/CVMI */
   if (ilm->linkmetrics_formula &&
       on->state >= OSPF6_NEIGHBOR_TWOWAY && prev_state < OSPF6_NEIGHBOR_TWOWAY)
-    ospf6_zebra_linkmetrics_rqst (on);
+    ospf6_zebra_linkmetrics_request (on);
 }
 
 static void
 ospf6_interface_init_linkmetrics (void)
 {
+  int err;
+
   install_element (INTERFACE_NODE,
 		   &ipv6_ospf6_linkmetrics_formula_cmd);
   install_element (INTERFACE_NODE,
@@ -1156,6 +1035,12 @@ ospf6_interface_init_linkmetrics (void)
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_linkmetrics_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_linkmetrics_cmd);
+
+  err = ospf6_add_linkmetrics_hook (ospf6_linkmetrics_update);
+  if (err)
+    {
+      zlog_err ("%s: error adding link metrics callback", __func__);
+    }
 }
 
 static void

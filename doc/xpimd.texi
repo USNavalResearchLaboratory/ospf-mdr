@@ -1,0 +1,71 @@
+@node Multicast Routing
+@chapter Multicast Routing
+
+The @command{xpimd} daemon supports IPv4 or IPv6 multicast routing
+based on the @url{http://www.xorp.org/, XORP} implementation of
+IGMP/MLD and PIM-SM.  The current implemetation uses code from XORP
+version 1.4.
+
+The @command{xpimd} multicast routing daemon includes three main
+components: the Multicast Forwarding Engine Abstraction (MFEA), The
+IPv6 Multicast Listener Discovery (MLD) protocol and IPv4 Internet
+Group Management Protocol (IGMP), and the Protocol Independent
+Multicast-Sparse Mode (PIM-SM) protocol.
+
+Multicast routing configuration commands are described in the
+following sections.  Additional information can be found in the
+@url{http://www.xorp.org/releases/1.8-CT/docs/user_manual/user_manual.pdf,
+XORP User Manual}.
+
+@menu
+* Invocation::
+* Multicast Forwarding Engine Abstraction (MFEA)::
+* Multicast Listener Discovery (MLD) / Internet Group Management Protocol (IGMP)::
+* Protocol Independent Multicast (PIM)::
+@end menu
+
+@node Invocation
+@section Invocation
+
+The following command-line options can be used when running @command{xpimd}:
+@table @code
+
+@item -d,--daemon
+Run as a daemon; disabled by default.
+
+@item -f,--config_file @var{config_file}
+Use @var{config_file} as the configuration file.
+
+@item -i,--pid_file @var{pid_file}
+Write the process identifier to @var{pid_file}.
+
+@item -A,--vty_addr @var{address}
+Set the vty address to @var{address}.
+
+@item -P,--vty_port @var{port_number}
+Set the vty port number to @var{port_number}.
+
+@item -u,--user @var{user}
+Run as user @var{user}.
+
+@item -g,--group @var{group}
+Run as group @var{group}.
+
+@item -v,--version
+Print the program version and exit.
+
+@item -C,--dryrun
+Check the configuration and exit.
+
+@item -4,--ipv4
+@itemx -6,--ipv6
+Set the address family used to be IPv4 or IPv6; IPv4 by default.
+
+@item -h
+Print a help message and exit.
+
+@end table
+
+@include mfea.texi
+@include mld6igmp.texi
+@include pim.texi

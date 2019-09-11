@@ -1,0 +1,18 @@
+{
+    extern "C"
+    {
+        "funcname_thread_add_read";
+        "funcname_thread_add_write";
+        "funcname_thread_add_timer";
+        "funcname_thread_add_timer_msec";
+        "funcname_thread_add_event";
+        "funcname_thread_add_background";
+        "funcname_thread_execute";
+        "thread_cancel";
+        "thread_cancel_event";
+        "thread_fetch";
+        "thread_call";
+        "thread_timer_remain_second";
+        "thread_should_yield";
+    };
+};

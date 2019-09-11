@@ -1,3 +1,19 @@
+%if "%(git rev-parse --git-dir 2> /dev/null)" != ""
+%define	commit_date	%(date -u -d @$(git log -1 --format='%%ct') +%%Y%%m%%d.%%H%%M%%S)
+%define	commit_hash	%(git log -1 --format='%%h')
+%define	dirty		%(git diff --quiet HEAD || echo .dirty)
+%define	commit		.g%{commit_hash}%{dirty}
+%else
+%if "%(svn info --show-item kind 2> /dev/null)" != ""
+%define	commit_date	%(date -u -d $(svn log -rHEAD --xml 2> /dev/null | sed -n -r -e '/<date>/{s|<date>(.*)</date>|\1|;p;q}') +%%Y%%m%%d.%%H%%M%%S)
+%define	commit_rev	%(svn log -rHEAD --xml 2> /dev/null | sed -n -r -e '/revision=/{s/.*revision="([0-9]+)".*/\1/;p;q}')
+%define	dirty		%((svn status -q | grep -q .) && echo .dirty)
+%define	commit		.s%{commit_rev}%{dirty}
+%else
+%define	commit_date	1
+%endif
+%endif
+
 # configure options
 #
 # Some can be overriden on rpmbuild commandline with:
@@ -69,7 +85,7 @@
 # misc internal defines
 %{!?quagga_uid:		%define         quagga_uid      92 }
 %{!?quagga_gid:		%define         quagga_gid      92 }
-%define		daemon_list	zebra ripd ospfd bgpd
+%define		daemon_list	zebra ripd ospfd bgpd xpimd
 
 %if %{with_ipv6}
 %define		daemonv6_list	ripngd ospf6d
@@ -94,17 +110,14 @@
 # allow build dir to be kept
 %{!?keep_build:		%define		keep_build	0 }
 
-#release sub-revision (digits after @VERSION@-)
-%{!?release_rev:	%define		release_rev	1 }
-
 Summary: Routing daemon
 Name:		quagga
 Version:	@VERSION@
-Release:	%{release_rev}
+Release:	%{?commit_date}%{?commit}
 License:	GPL
 Group: System Environment/Daemons
 Source0:	http://downloads.pf.itd.nrl.navy.mil/ospf-manet/%{name}-%{version}.tar.gz
-URL:		http://cs.itd.nrl.navy.mil/work/ospf-manet/index.php
+URL:		http://www.nrl.navy.mil/itd/ncs/products/ospf-manet
 %if %{with_snmp}
 BuildRequires:	net-snmp-devel
 Requires:	net-snmp
@@ -113,7 +126,7 @@ Requires:	net-snmp
 BuildRequires:	readline readline-devel ncurses ncurses-devel
 Requires:	ncurses
 %endif
-BuildRequires:	texinfo texinfo-tex tetex autoconf patch libcap-devel tetex texi2html ImageMagick
+BuildRequires:	texinfo texinfo-tex texlive-base autoconf patch libcap-devel texi2html ImageMagick
 %if %{with_pam}
 BuildRequires:	pam-devel
 %endif
@@ -326,6 +339,7 @@ zebra_spec_add_service isisd    2608/tcp "ISISd vty"
 %if %{with_babeld}
 zebra_spec_add_service babeld   2609/tcp "babeld vty"
 %endif
+zebra_spec_add_service xpimd    2610/tcp "Xpimd vty"
 
 for daemon in %daemon_list ; do
 	/sbin/chkconfig --add ${daemon}
@@ -443,6 +457,7 @@ rm -rf $RPM_BUILD_ROOT
 %if %{with_babeld}
 %{_sbindir}/babeld
 %endif
+%{_sbindir}/xpimd
 %dir %attr(755,root,root) %{_libdir}
 %if %{with_shared}
 %dir %{_libdir}

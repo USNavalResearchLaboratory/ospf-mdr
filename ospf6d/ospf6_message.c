@@ -863,6 +863,13 @@ ospf6_dbdesc_recv (struct in6_addr *src, struct in6_addr *dst,
       return;
     }
 
+  if (on->state >= OSPF6_NEIGHBOR_TWOWAY &&
+      on->ospf6_if->relax_neighbor_inactivity)
+    {
+      /* reset Inactivity Timer */
+      ospf6_neighbor_schedule_inactivity (on);
+    }
+
   dbdesc = (struct ospf6_dbdesc *)
     ((caddr_t) oh + sizeof (struct ospf6_header));
 
@@ -937,6 +944,13 @@ ospf6_lsreq_recv (struct in6_addr *src, struct in6_addr *dst,
       if (IS_OSPF6_DEBUG_MESSAGE (oh->type, RECV))
         zlog_debug ("Neighbor not found, ignore");
       return;
+    }
+
+  if (on->state >= OSPF6_NEIGHBOR_TWOWAY &&
+      on->ospf6_if->relax_neighbor_inactivity)
+    {
+      /* reset Inactivity Timer */
+      ospf6_neighbor_schedule_inactivity (on);
     }
 
   if (on->state != OSPF6_NEIGHBOR_EXCHANGE &&
@@ -1444,6 +1458,13 @@ ospf6_lsupdate_recv (struct in6_addr *src, struct in6_addr *dst,
       return;
     }
 
+  if (on->state >= OSPF6_NEIGHBOR_TWOWAY &&
+      on->ospf6_if->relax_neighbor_inactivity)
+    {
+      /* reset Inactivity Timer */
+      ospf6_neighbor_schedule_inactivity (on);
+    }
+
   // MDR processes LSAs received from any bidirectional neighbor.
   if (on->ospf6_if->type == OSPF6_IFTYPE_MDR)
     {
@@ -1510,6 +1531,13 @@ ospf6_lsack_recv (struct in6_addr *src, struct in6_addr *dst,
       if (IS_OSPF6_DEBUG_MESSAGE (oh->type, RECV))
         zlog_debug ("Neighbor not found, ignore");
       return;
+    }
+
+  if (on->state >= OSPF6_NEIGHBOR_TWOWAY &&
+      on->ospf6_if->relax_neighbor_inactivity)
+    {
+      /* reset Inactivity Timer */
+      ospf6_neighbor_schedule_inactivity (on);
     }
 
   if (on->state != OSPF6_NEIGHBOR_EXCHANGE &&
@@ -1607,10 +1635,10 @@ ospf6_lsack_recv (struct in6_addr *src, struct in6_addr *dst,
 
 static u_char *recvbuf = NULL;
 static u_char *sendbuf = NULL;
-static unsigned int iobuflen = 0;
+static size_t iobuflen = 0;
 
-int
-ospf6_iobuf_size (unsigned int size)
+size_t
+ospf6_iobuf_size (size_t size)
 {
   u_char *recvnew, *sendnew;
 
@@ -1625,7 +1653,7 @@ ospf6_iobuf_size (unsigned int size)
         XFREE (MTYPE_OSPF6_MESSAGE, recvnew);
       if (sendnew)
         XFREE (MTYPE_OSPF6_MESSAGE, sendnew);
-      zlog_debug ("Could not allocate I/O buffer of size %d.", size);
+      zlog_debug ("Could not allocate I/O buffer of size %zu.", size);
       return iobuflen;
     }
 
@@ -1912,6 +1940,39 @@ ospf6_packet_max(struct ospf6_interface *oi)
 }
 
 void
+ospf6_schedule_immediate_hello (struct ospf6_interface *oi)
+{
+  unsigned int msec, max_msec;
+
+  assert (oi->allow_immediate_hello);
+  assert (oi->initial_immediate_hello_delay > 0);
+
+  if (oi->immediate_hello_delay == 0)
+    oi->immediate_hello_delay = oi->initial_immediate_hello_delay;
+  else
+    /* quadruple the immediate hello delay */
+    oi->immediate_hello_delay = oi->immediate_hello_delay << 2;
+
+  max_msec = 1000 * oi->hello_interval;
+  if (timerisset (&oi->last_hello_time))
+    {
+      struct timeval now;
+
+      quagga_gettime (QUAGGA_CLK_MONOTONIC, &now);
+      max_msec -= timersub_msec (&now, &oi->last_hello_time);
+    }
+
+  if (oi->immediate_hello_delay < max_msec)
+    msec = oi->immediate_hello_delay;
+  else
+    msec = max_msec;
+
+  THREAD_OFF (oi->thread_send_hello);
+  oi->thread_send_hello =
+    thread_add_timer_msec (master, ospf6_hello_send, oi, msec);
+}
+
+void
 ospf6_schedule_hello (struct ospf6_interface *oi)
 {
   unsigned int msec;
@@ -1946,8 +2007,40 @@ ospf6_hello_send (struct thread *thread)
     }
 
   if (oi->type == OSPF6_IFTYPE_LOOPBACK)
-    return 0;
-  else if (oi->type == OSPF6_IFTYPE_MDR)
+    {
+      if (IS_OSPF6_DEBUG_MESSAGE (OSPF6_MESSAGE_TYPE_HELLO, SEND))
+        zlog_debug ("Not sending Hello on loopback interface %s",
+		    oi->interface->name);
+      return 0;
+    }
+
+  if (CHECK_FLAG (oi->flag, OSPF6_INTERFACE_PASSIVE))
+    {
+      if (IS_OSPF6_DEBUG_MESSAGE (OSPF6_MESSAGE_TYPE_HELLO, SEND))
+        zlog_debug ("Not sending Hello on passive interface %s",
+		    oi->interface->name);
+      return 0;
+    }
+
+  if (oi->allow_immediate_hello)
+    {
+      struct timeval now;
+
+      quagga_gettime (QUAGGA_CLK_MONOTONIC, &now);
+
+      /* if immediate hellos are active, reset the immediate hello
+       * delay if a full hello interval has elapsed since sending the
+       * last hello
+       */
+      if (oi->immediate_hello_delay > 0 &&
+	  timersub_msec (&now, &oi->last_hello_time) >=
+	  1000 * oi->hello_interval)
+	oi->immediate_hello_delay = 0;
+
+      oi->last_hello_time = now;
+    }
+
+  if (oi->type == OSPF6_IFTYPE_MDR)
     return ospf6_mdr_hello_send (oi, sendbuf, iobuflen);
 
   /* set next thread */

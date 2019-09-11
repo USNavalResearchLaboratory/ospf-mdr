@@ -631,11 +631,14 @@ ospf6_lsa_expire (struct thread *thread)
   if (CHECK_FLAG (lsa->flag, OSPF6_LSA_HEADERONLY))
     return 0;    /* dbexchange will do something ... */
 
-  /* reinstall lsa */
-  ospf6_install_lsa (lsa);
+  /* remove lsa from any retransmission lists */
+  ospf6_flood_clear (lsa);
 
   /* reflood lsa */
   ospf6_flood (NULL, lsa);
+
+  /* reinstall lsa */
+  ospf6_install_lsa (lsa);
 
   /* schedule maxage remover */
   ospf6_maxage_remove (ospf6);

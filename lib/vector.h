@@ -23,6 +23,10 @@
 #ifndef _ZEBRA_VECTOR_H
 #define _ZEBRA_VECTOR_H
 
+#ifdef __cplusplus
+#define vector __quagga_vector
+#endif /* __cplusplus */
+
 /* struct for vector */
 struct _vector 
 {
@@ -59,5 +63,9 @@ extern vector vector_copy (vector v);
 
 extern void *vector_lookup (vector, unsigned int);
 extern void *vector_lookup_ensure (vector, unsigned int);
+
+#ifdef __cplusplus
+#undef vector
+#endif /* __cplusplus */
 
 #endif /* _ZEBRA_VECTOR_H */

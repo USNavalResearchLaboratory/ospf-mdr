@@ -50,7 +50,7 @@ struct ospf6_interface
   struct in6_addr *linklocal_addr;
 
   /* IPv4 linklocal address of this I/F */
-  struct in6_addr *linklocal_addr_ipv4;
+  struct in_addr *linklocal_addr_ipv4;
 
   /* Interface ID; use interface->ifindex */
 
@@ -72,9 +72,11 @@ struct ospf6_interface
 #define DEAD_INTERVAL_CONFIGURED	(1U << 1)
 #define RXMT_INTERVAL_CONFIGURED	(1U << 2)
 #define LINK_LSA_SUPPRESSION_CONFIGURED	(1U << 3)
+#define ALLOW_IMMEDIATE_HELLO_CONFIGURED (1U << 4)
 
   /* Cost */
   u_int32_t cost;
+  bool cost_configured; /* true if an interface cost was configured */
 
   /* I/F MTU */
   u_int32_t ifmtu;
@@ -120,7 +122,15 @@ struct ospf6_interface
 
   int LinkLSASuppression;
 
+  bool allow_immediate_hello;
+  struct timeval last_hello_time;
+  unsigned int initial_immediate_hello_delay; /* msec */
+  unsigned int immediate_hello_delay;	      /* msec */
+
   int flood_delay;              //msec
+
+  bool relax_neighbor_inactivity;
+  unsigned int adjacency_formation_limit;
 
   struct ospf6_mdr_interface mdr;
 
@@ -314,6 +324,9 @@ extern const char *ospf6_interface_state_str[];
 #define OSPF6_INTERFACE_TRANSDELAY     1
 #define OSPF6_INTERFACE_FLOOD_DELAY    100
 
+/* default values */
+#define OSPF6_INITIAL_IMMEDIATE_HELLO_DELAY 2
+
 
 /* Function Prototypes */
 
@@ -328,7 +341,9 @@ extern void ospf6_interface_disable (struct ospf6_interface *);
 extern void ospf6_interface_if_add (struct interface *);
 extern void ospf6_interface_if_del (struct interface *);
 extern void ospf6_interface_state_update (struct interface *);
+extern bool ospf6_interface_has_linklocal_addr (struct ospf6_interface *);
 extern void ospf6_interface_connected_route_update (struct interface *);
+extern void ospf6_interface_update_bandwidth (struct ospf6_interface *);
 
 extern bool ospf6_interface_prefix_is_connected (struct ospf6_interface *oi,
 						 struct prefix *prefix);

@@ -45,7 +45,7 @@
 #include "ospf6_spf.h"
 #include "ospf6_callbacks.h"
 
-static struct list ospf6_update_mdr_level_hooks;
+static struct list *ospf6_update_mdr_level_hooks;
 
 static int ospf6_mdr_update_lsa_full (struct ospf6_interface *oi);
 static int ospf6_mdr_update_lsa_minimal (struct ospf6_interface *oi);
@@ -68,10 +68,24 @@ static bool ospf6_sidcds_lexicographic (int RtrPri_A, int RtrPri_B,
 static void ospf6_mdr_create_adj_san_matrices (struct ospf6_interface *oi);
 static void ospf6_mdr_free_adj_san_matrices (struct ospf6_interface *oi);
 
+static void __attribute__((constructor))
+ospf6_mdr_init (void)
+{
+  assert (ospf6_update_mdr_level_hooks == NULL);
+  ospf6_update_mdr_level_hooks = list_new ();
+}
+
+static void __attribute__((destructor))
+ospf6_mdr_terminate (void)
+{
+  list_delete (ospf6_update_mdr_level_hooks);
+  ospf6_update_mdr_level_hooks = NULL;
+}
+
 static void
 ospf6_run_update_mdr_level_hooks (struct ospf6_interface *oi)
 {
-  RUN_HOOKS(&ospf6_update_mdr_level_hooks, update_mdr_level_hook_t, oi);
+  RUN_HOOKS (ospf6_update_mdr_level_hooks, update_mdr_level_hook_t, oi);
 }
 
 int
@@ -79,7 +93,7 @@ ospf6_add_update_mdr_level_hook (update_mdr_level_hook_t hook)
 {
   int err;
 
-  err = ospf6_add_hook (&ospf6_update_mdr_level_hooks, hook);
+  err = ospf6_add_hook (ospf6_update_mdr_level_hooks, hook);
 
   if (!err && ospf6 != NULL)
     {
@@ -103,7 +117,7 @@ ospf6_add_update_mdr_level_hook (update_mdr_level_hook_t hook)
 int
 ospf6_remove_update_mdr_level_hook (update_mdr_level_hook_t hook)
 {
-  return ospf6_remove_hook (&ospf6_update_mdr_level_hooks, hook);
+  return ospf6_remove_hook (ospf6_update_mdr_level_hooks, hook);
 }
 
 //Determine if node is in CDS
@@ -127,7 +141,25 @@ ospf6_calculate_mdr (struct ospf6_interface *oi)
   // Do not calculate MDRs within hello_interval times TwoHopRefresh.
   if (elapsed_sec (&ospf6->starttime) <
       oi->hello_interval * oi->mdr.TwoHopRefresh)
-    return;
+    {
+      bool wait = true;
+      if (oi->allow_immediate_hello && listcount (oi->neighbor_list) > 0)
+        {
+          // don't wait if a full hello has been received from all
+          // known neighbors
+          wait = false;
+          for (ALL_LIST_ELEMENTS_RO (oi->neighbor_list, j, onj))
+            {
+              if (!onj->mdr.Report2Hop)
+                {
+                  wait = true;
+                  break;
+                }
+            }
+        }
+      if (wait)
+        return;
+    }
 
   tree = list_new ();
 

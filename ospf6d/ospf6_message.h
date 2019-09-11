@@ -130,7 +130,7 @@ extern void ospf6_lsreq_print (struct ospf6_header *);
 extern void ospf6_lsupdate_print (struct ospf6_header *);
 extern void ospf6_lsack_print (struct ospf6_header *);
 
-extern int ospf6_iobuf_size (unsigned int size);
+extern size_t ospf6_iobuf_size (size_t size);
 extern void ospf6_message_terminate (void);
 extern int ospf6_receive (struct thread *thread);
 extern void ospf6_send (struct in6_addr *src, struct in6_addr *dst,
@@ -155,6 +155,7 @@ ospf6_send_lsupdate_delayed_msec (struct thread_master *m,
 				  void *arg, long timer, struct thread *t);
 
 extern void ospf6_schedule_hello (struct ospf6_interface *oi);
+extern void ospf6_schedule_immediate_hello (struct ospf6_interface *oi);
 
 #endif /* OSPF6_MESSAGE_H */
 

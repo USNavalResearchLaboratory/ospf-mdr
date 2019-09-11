@@ -73,6 +73,9 @@ ospf6_mdr_interface_configure_defaults (struct ospf6_interface *oi)
 
   if (!(oi->config_status & LINK_LSA_SUPPRESSION_CONFIGURED))
     oi->LinkLSASuppression = 1;
+
+  if (!(oi->config_status & ALLOW_IMMEDIATE_HELLO_CONFIGURED))
+    oi->allow_immediate_hello = true;
 }
 
 void

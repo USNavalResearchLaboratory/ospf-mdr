@@ -82,6 +82,43 @@ address of Hello packets).
 Link-LSA suppression is disabled by default.
 @end deffn
 
+@deffn {Interface Command} {ipv6 ospf6 allow-immediate-hello} {}
+@deffnx {Interface Command} {no ipv6 ospf6 allow-immediate-hello} {}
+Enable or disable sending immediate reply Hellos for the interface.
+When enabled, a Hello will be sent immediately in response to
+receiving a Hello from a neighbor whose state is less than 2-Way.  The
+frequency of sending immediate Hellos decreases exponentially unless
+the state of a less-than-2-Way neighbor increases.
+
+Immediate reply Hellos are enabled for MDR interfaces and disabled for
+other interface types by default.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 relax-neighbor-inactivity} {}
+@deffnx {Interface Command} {no ipv6 ospf6 relax-neighbor-inactivity} {}
+
+When relaxed neighbor inactivity is enabled, the Inactivity Timer for
+a neighbor is restarted whenever an OSPF protocol packet is received
+from the neighbor and the neighbor's state is at least 2-Way.  Without
+relaxed neighbor inactivity the Inactivity Timer for a neighbor is
+only restarted when a Hello is received.
+
+Relaxed neighbor inactivity is disabled by default.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 adjacency-formation-limit <1-65535>} {}
+@deffnx {Interface Command} {no ipv6 ospf6 adjacency-formation-limit} {}
+
+Limit the number of adjacencies being concurrently formed through an
+interface.
+
+When enabled, the number of neighbors in state ExStart, Exchange, or
+Loading is limited to the configure value.  This does not limit the
+number of fully adjacent neighbors.
+
+There is no limit by default.
+@end deffn
+
 @node Redistribute routes to OSPF6
 @section Redistribute routes to OSPF6
 

@@ -41,9 +41,9 @@ noinst_HEADERS = \
 	interface.h ipforward.h irdp.h router-id.h kernel_socket.h \
 	zserv_linkmetrics.h linkmetrics_netlink.h
 
-zebra_LDADD = $(otherobj) $(LIBCAP) $(LIB_IPV6) $(GENL_LIBS) ../lib/libzebra.la
+zebra_LDADD = $(otherobj) ../lib/libzebra.la $(LIBCAP) $(LIB_IPV6) $(GENL_LIBS)
 
-testzebra_LDADD = $(LIBCAP) $(LIB_IPV6) ../lib/libzebra.la
+testzebra_LDADD = ../lib/libzebra.la $(LIBCAP) $(LIB_IPV6)
 
 zebra_DEPENDENCIES = $(otherobj)
 

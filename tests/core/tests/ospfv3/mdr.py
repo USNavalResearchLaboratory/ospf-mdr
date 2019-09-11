@@ -27,7 +27,7 @@ class TestOspfv3Mdr(quagga.test.QuaggaTestCase):
     numnodes = None
     af = None
 
-    stableDuration = 4
+    stableDuration = 10
     stableWait = 60
 
     quagga_conf_template = '''\

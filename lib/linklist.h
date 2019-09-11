@@ -22,6 +22,10 @@
 #ifndef _ZEBRA_LINKLIST_H
 #define _ZEBRA_LINKLIST_H
 
+#ifdef __cplusplus
+#define list __quagga_list
+#endif /* __cplusplus */
+
 /* listnodes must always contain data to be valid. Adding an empty node
  * to a list is invalid
  */
@@ -144,5 +148,9 @@ extern void list_add_list (struct list *, struct list *);
 #define LIST_LOOP(L,V,N) \
   for (ALL_LIST_ELEMENTS_RO (L,N,V))
 #endif /* QUAGGA_NO_DEPRECATED_INTERFACES */
+
+#ifdef __cplusplus
+#undef list
+#endif /* __cplusplus */
 
 #endif /* _ZEBRA_LINKLIST_H */

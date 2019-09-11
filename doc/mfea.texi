@@ -1,0 +1,134 @@
+@node Multicast Forwarding Engine Abstraction (MFEA)
+@section Multicast Forwarding Engine Abstraction (MFEA)
+
+The Multicast Forwarding Engine Abstraction (MFEA) provides a
+system-independent interface for other multicast routing components
+(MLD/IGMP and PIM).  See the XORP MFEA documentation for more
+information.
+
+@menu
+* MFEA Configuration::
+* MFEA Information::
+* Example MFEA Configuration::
+@end menu
+
+@node MFEA Configuration
+@subsection MFEA Configuration
+
+The MFEA is enabled by default, however each multicast routing
+interface must be explicitly configured.
+
+The following commands are used to configure the MFEA.
+
+@subsubsection MFEA Router Commands
+
+@deffn  {Command} {router mfea} {}
+@deffnx {Command} {router mfea6} {}
+Enable the MFEA.
+@end deffn
+
+@deffn  {Command} {no router mfea} {}
+@deffnx {Command} {no router mfea6} {}
+Disable the MFEA.
+@end deffn
+
+@subsubsection MFEA Interface Commands
+
+@deffn  {Interface Command} {ip mfea} {}
+@deffnx {Interface Command} {ipv6 mfea6} {}
+Enable multicast forwarding for an interface.
+@end deffn
+
+@deffn  {Interface Command} {no ip mfea} {}
+@deffnx {Interface Command} {no ipv6 mfea6} {}
+Disable multicast forwarding for an interface.
+@end deffn
+
+@subsubsection MFEA Debug Commands
+
+@deffn  {Command} {debug mfea} {}
+@deffnx {Command} {debug mfea6} {}
+Enable MFEA debugging.
+@end deffn
+
+@deffn  {Command} {no debug mfea} {}
+@deffnx {Command} {no debug mfea6} {}
+Disable MFEA debugging.
+@end deffn
+
+@deffn  {Command} {debug mfea trace} {}
+@deffnx {Command} {debug mfea6 trace} {}
+Enable trace-level MFEA debugging.
+@end deffn
+
+@deffn  {Command} {no debug mfea trace} {}
+@deffnx {Command} {no debug mfea6 trace} {}
+Disable trace-level MFEA debugging.
+@end deffn
+
+
+@node MFEA Information
+@subsection MFEA Information
+
+The following commands provide information about the MFEA.
+
+@subsubsection MFEA Information Commands
+
+@deffn  {Command} {show ip mfea dataflow} [A.B.C.D[/M]]
+@deffnx {Command} {show ipv6 mfea6 dataflow} [X:X::X:X[/M]]
+Display information about user-space MFEA dataflow filters for the
+specified multicast group or group range (all groups if omitted).
+Kernel multicast filter information is not shown.
+@end deffn
+
+@deffn  {Command} {show ip mfea interface} [IFNAME]
+@deffnx {Command} {show ipv6 mfea6 interface} [IFNAME]
+Display information about interface @var{IFNAME}, or all interfaces
+the MFEA is aware of if no interface is specified.
+@end deffn
+
+@deffn  {Command} {show ip mfea interface-address} [IFNAME]
+@deffnx {Command} {show ipv6 mfea6 interface-address} [IFNAME]
+Display address information about interface @var{IFNAME}, or all
+interfaces the MFEA is aware of if no interface is specified.
+@end deffn
+
+
+@node Example MFEA Configuration
+@subsection Example MFEA Configuration
+
+Example IPv4 MFEA configuration:
+@example
+debug mfea
+!
+interface eth0
+ ip mfea
+!
+router mfea
+@end example
+
+Minimal IPv4 MFEA configuration:
+@example
+interface eth0
+ ip mfea
+!
+router mfea
+@end example
+
+Example IPv6 MFEA configuration:
+@example
+debug mfea6
+!
+interface eth0
+ ipv6 mfea6
+!
+router mfea6
+@end example
+
+Minimal IPv6 MFEA configuration:
+@example
+interface eth0
+ ipv6 mfea6
+!
+router mfea6
+@end example

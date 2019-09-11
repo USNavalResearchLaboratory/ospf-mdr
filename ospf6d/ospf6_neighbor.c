@@ -330,6 +330,24 @@ ospf6_neighbor_hello_recv (struct ospf6_neighbor *on,
   return 0;
 }
 
+static unsigned int
+ospf6_interface_adjacency_formation_count (struct ospf6_interface *oi)
+{
+  unsigned int count;
+  struct listnode *node;
+  struct ospf6_neighbor *on;
+
+  count = 0;
+  for (ALL_LIST_ELEMENTS_RO (oi->neighbor_list, node, on))
+    {
+      if (on->state > OSPF6_NEIGHBOR_TWOWAY &&
+          on->state < OSPF6_NEIGHBOR_FULL)
+        count++;
+    }
+
+  return count;
+}
+
 void
 ospf6_neighbor_state_change (u_char next_state, struct ospf6_neighbor *on)
 {
@@ -346,6 +364,17 @@ ospf6_neighbor_state_change (u_char next_state, struct ospf6_neighbor *on)
     return;
 
   quagga_gettime (QUAGGA_CLK_MONOTONIC, &on->last_changed);
+
+  if (oi->allow_immediate_hello)
+    {
+      /* reset the immediate hello delay if immediate hellos are
+       * active and the neighbor state is increasing (assume the
+       * immediate hellos are effective)
+       */
+      if (oi->immediate_hello_delay > 0 &&
+	  prev_state < OSPF6_NEIGHBOR_TWOWAY && next_state > prev_state)
+	oi->immediate_hello_delay = 0;
+    }
 
   /* log */
   if (IS_OSPF6_DEBUG_NEIGHBOR (STATE))
@@ -385,6 +414,22 @@ ospf6_neighbor_state_change (u_char next_state, struct ospf6_neighbor *on)
       if (!ops->state_change)
 	continue;
       ops->state_change (on, prev_state);
+    }
+
+  if (oi->adjacency_formation_limit > 0 &&
+      next_state == OSPF6_NEIGHBOR_FULL &&
+      ospf6_interface_adjacency_formation_count (oi) <
+      oi->adjacency_formation_limit)
+    {
+      struct ospf6_neighbor *on2;
+      for (ALL_LIST_ELEMENTS_RO (oi->neighbor_list, node, on2))
+        {
+          if (on2->state == OSPF6_NEIGHBOR_TWOWAY && need_adjacency (on2))
+            {
+              ospf6_neighbor_exstart (on2);
+              break;
+            }
+        }
     }
 }
 
@@ -433,6 +478,9 @@ hello_received (struct thread *thread)
 
   /* reset Inactivity Timer */
   ospf6_neighbor_schedule_inactivity (on);
+
+  if (on->ospf6_if->allow_immediate_hello && on->state < OSPF6_NEIGHBOR_TWOWAY)
+    ospf6_schedule_immediate_hello (on->ospf6_if);
 
   if (on->state <= OSPF6_NEIGHBOR_DOWN &&
       (on->ospf6_if->type != OSPF6_IFTYPE_MDR ||
@@ -499,7 +547,24 @@ __ospf6_neighbor_exstart (struct ospf6_neighbor *on, u_int32_t dbdesc_seqnum)
 void
 ospf6_neighbor_exstart (struct ospf6_neighbor *on)
 {
+  struct ospf6_interface *oi;
   struct timeval tv;
+
+  oi = on->ospf6_if;
+  if (oi->adjacency_formation_limit > 0)
+    {
+      unsigned int count;
+
+      count = ospf6_interface_adjacency_formation_count (oi);
+      if (count >= oi->adjacency_formation_limit)
+        {
+          if (IS_OSPF6_DEBUG_NEIGHBOR (EVENT))
+            zlog_debug ("Deferring ExStart for neighbor %s: "
+                        "%u partial adjacencies for interface %s",
+                        on->name, count, oi->interface->name);
+          return;
+        }
+    }
 
   /* the initial sequence number for DbDesc */
   if (quagga_gettime (QUAGGA_CLK_MONOTONIC, &tv) < 0)

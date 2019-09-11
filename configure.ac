@@ -7,7 +7,7 @@
 ##
 AC_PREREQ(2.53)
 
-AC_INIT(Quagga, 0.99.21mr2.2-dev, [https://bugzilla.quagga.net])
+AC_INIT(Quagga, 0.99.21mr2.2, [https://bugzilla.quagga.net])
 AC_CONFIG_SRCDIR(lib/zebra.h)
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -21,6 +21,7 @@ AC_CANONICAL_TARGET()
 AM_INIT_AUTOMAKE(1.6)
 AM_CONFIG_HEADER(config.h)
 
+AC_PATH_PROG(PERL, perl)
 AC_CHECK_PROG([GAWK],[gawk],[gawk],[not-in-PATH])
 if test "x$GAWK" = "xnot-in-PATH" ; then
 	AC_MSG_ERROR([GNU awk is required for lib/memtype.h made by memtypes.awk.
@@ -59,6 +60,21 @@ elif test -n "$CFLAGS" ; then
   cflags_specified=yes ;
 fi
 
+dnl Check CXXFLAGS
+dnl ------------
+AC_ARG_WITH(cxxflags,
+[  --with-cxxflags         Set CXXFLAGS for use in compilation.])
+if test "x$with_cxxflags" != "x" ; then
+  CXXFLAGS="$with_cxxflags" ; cxxflags_specified=yes ;
+elif test -n "$CXXFLAGS" ; then
+  cxxflags_specified=yes ;
+elif test -n "$CFLAGS" ; then
+  CXXFLAGS="$CFLAGS" ; cxxflags_specified=yes ;
+fi
+if test "$enable_xpimd_callback_debug" = "yes"; then
+  CXXFLAGS="${CXXFLAGS} -DDEBUG_CALLBACKS"
+fi
+
 dnl --------------------
 dnl Check CC and friends
 dnl --------------------
@@ -67,6 +83,9 @@ AC_PROG_CC
 AC_PROG_CPP
 AM_PROG_CC_C_O
 AC_PROG_EGREP
+AC_PROG_CXX
+AC_PROG_CXXCPP
+AC_PROG_CXX_C_O
 
 dnl autoconf 2.59 appears not to support AC_PROG_SED
 dnl AC_PROG_SED
@@ -152,6 +171,21 @@ else
   AC_MSG_RESULT([CFLAGS supplied by user])
 fi
 
+AC_MSG_CHECKING([whether to set a default CXXFLAGS])
+if test "x${cxxflags_specified}" = "x" ; then
+  case ${COMPILER} in
+    "GCC")
+        CXXFLAGS="-g -Wall"
+        AC_MSG_RESULT([gcc default])
+        ;;
+    *)
+        AC_MSG_RESULT([unknown compiler])
+        ;;
+  esac
+else
+  AC_MSG_RESULT([CXXFLAGS supplied by user])
+fi
+
 dnl --------------
 dnl Check programs
 dnl --------------
@@ -189,6 +223,12 @@ AC_PROG_LIBTOOL
 dnl ----------------------
 dnl Packages configuration
 dnl ----------------------
+AC_ARG_WITH(pkg-extra-version,
+	AS_HELP_STRING([--with-pkg-extra-version=VER], [add extra version field, for packagers/distributions]),
+	[EXTRAVERSION=$withval],)
+AC_ARG_WITH(pkg-git-version,
+	AS_HELP_STRING([--with-pkg-git-version], [add git information to MOTD and build version string]),
+	[ test "x$withval" != "xno" && with_pkg_git_version="yes" ])
 AC_ARG_ENABLE(vtysh,
 [  --enable-vtysh          include integrated vty shell for Quagga])
 AC_ARG_ENABLE(ipv6,
@@ -213,6 +253,8 @@ AC_ARG_ENABLE(watchquagga,
 [  --disable-watchquagga   do not build watchquagga])
 AC_ARG_ENABLE(isisd,
 [  --enable-isisd          build isisd])
+AC_ARG_ENABLE(xpimd,
+[  --disable-xpimd         do not build xpimd])
 AC_ARG_ENABLE(solaris,
 [  --enable-solaris          build solaris])
 AC_ARG_ENABLE(bgp-announce,
@@ -269,6 +311,8 @@ AC_ARG_ENABLE(time-check,
 [  --disable-time-check          disable slow thread warning messages])
 AC_ARG_ENABLE(pcreposix,
 [  --enable-pcreposix          enable using PCRE Posix libs for regex functions])
+AC_ARG_ENABLE(xpimd_callback_debug,
+[  --enable-xpimd-callback-debug enable xpimd callback debugging])
 
 if test x"${enable_gcc_ultra_verbose}" = x"yes" ; then
   CFLAGS="${CFLAGS} -W -Wcast-qual -Wstrict-prototypes"
@@ -383,6 +427,25 @@ case "${enable_multipath}" in
 esac
 
 AC_SUBST(MULTIPATH_NUM)
+
+dnl -----------------------------------
+dnl Add extra version string to package
+dnl name, string and version fields.
+dnl -----------------------------------
+if test "x${EXTRAVERSION}" != "x" ; then
+  VERSION="${VERSION}${EXTRAVERSION}"
+  PACKAGE_VERSION="${PACKAGE_VERSION}${EXTRAVERSION}"
+  PACKAGE_STRING="${PACKAGE_STRING}${EXTRAVERSION}"
+fi
+
+if test "x$with_pkg_git_version" = "xyes"; then
+	if test -d "${srcdir}/.git"; then
+		AC_DEFINE(GIT_VERSION, [1], [include git version info])
+	else	with_pkg_git_version="no"
+		AC_MSG_WARN([--with-pkg-git-version given, but this is not a git checkout])
+	fi
+fi
+AM_CONDITIONAL([GIT_VERSION], [test "x$with_pkg_git_version" = "xyes"])
 
 dnl ------------------------------------
 dnl Check C keywords and standard  types
@@ -592,7 +655,6 @@ dnl ---------------------
 case "${enable_vtysh}" in
   "yes") VTYSH="vtysh";
          AC_DEFINE(VTYSH,,VTY shell)
-	 AC_PATH_PROG(PERL, perl)
 dnl	 Vtysh uses libreadline, which looks for termcap functions at
 dnl	 configure time.  We follow readlines search order.
 dnl	 The required procedures are in libtermcap on NetBSD, in
@@ -690,6 +752,9 @@ dnl -------------------------------
 dnl Endian-ness check
 dnl -------------------------------
 AC_WORDS_BIGENDIAN
+if test $ac_cv_c_bigendian = no; then
+  AC_DEFINE(WORDS_SMALLENDIAN,1,little-endian processor)
+fi
 
 dnl -------------------------------
 dnl check the size in byte of the C
@@ -1293,6 +1358,12 @@ case "${enable_ospf6d}" in
 esac
 AM_CONDITIONAL(OSPF6D, test "x$OSPF6D" = "xospf6d")
 
+case "${enable_xpimd}" in
+  "no" ) XPIMD="";;
+  *    ) XPIMD="xpimd";;
+esac
+AM_CONDITIONAL(XPIMD, test "x$XPIMD" = "xxpimd")
+
 case "${enable_isisd}" in
   "yes") ISISD="isisd";;
   "no" ) ISISD="";;
@@ -1323,6 +1394,7 @@ AC_SUBST(OSPF6D)
 AC_SUBST(BABELD)
 AC_SUBST(WATCHQUAGGA)
 AC_SUBST(ISISD)
+AC_SUBST(XPIMD)
 AC_SUBST(SOLARIS)
 AC_SUBST(VTYSH)
 AC_SUBST(INCLUDES)
@@ -1540,6 +1612,21 @@ AC_CHECK_HEADER([malloc.h],
   )
  ], [], QUAGGA_INCLUDES)
 
+dnl -----------------------------------
+dnl additional defines/checks for xpimd
+dnl -----------------------------------
+if test "${enable_xpimd}" != "no"; then
+    AC_DEFINE(QUAGGA_MULTICAST,1,Quagga multicast support)
+
+    m4_include(xpimd/xorp/config/acxorp.m4)
+    m4_include(xpimd/xorp/config/acipv4.m4)
+    m4_include(xpimd/xorp/config/acipv6.m4)
+    m4_include(xpimd/xorp/config/acipmrt.m4)
+    m4_include(xpimd/xorp/config/actime.m4)
+fi
+AM_CONDITIONAL([LDFLAGS_BSYMBOLIC_FUNCTIONS],
+	[echo "$LDFLAGS" | grep -F -- -Bsymbolic-functions > /dev/null 2>&1])
+
 dnl ----------
 dnl configure date
 dnl ----------
@@ -1607,6 +1694,7 @@ AC_DEFINE_UNQUOTED(PATH_OSPFD_PID, "$quagga_statedir/ospfd.pid",ospfd PID)
 AC_DEFINE_UNQUOTED(PATH_OSPF6D_PID, "$quagga_statedir/ospf6d.pid",ospf6d PID)
 AC_DEFINE_UNQUOTED(PATH_BABELD_PID, "$quagga_statedir/babeld.pid",babeld PID)
 AC_DEFINE_UNQUOTED(PATH_ISISD_PID, "$quagga_statedir/isisd.pid",isisd PID)
+AC_DEFINE_UNQUOTED(PATH_XPIMD_PID, "$quagga_statedir/xpimd.pid",xpimd PID)
 AC_DEFINE_UNQUOTED(PATH_WATCHQUAGGA_PID, "$quagga_statedir/watchquagga.pid",watchquagga PID)
 AC_DEFINE_UNQUOTED(ZEBRA_SERV_PATH, "$quagga_statedir/zserv.api",zebra api socket)
 AC_DEFINE_UNQUOTED(ZEBRA_VTYSH_PATH, "$quagga_statedir/zebra.vty",zebra vty socket)
@@ -1617,6 +1705,7 @@ AC_DEFINE_UNQUOTED(OSPF_VTYSH_PATH, "$quagga_statedir/ospfd.vty",ospfd vty socke
 AC_DEFINE_UNQUOTED(OSPF6_VTYSH_PATH, "$quagga_statedir/ospf6d.vty",ospf6d vty socket)
 AC_DEFINE_UNQUOTED(BABEL_VTYSH_PATH, "$quagga_statedir/babeld.vty",babeld vty socket)
 AC_DEFINE_UNQUOTED(ISIS_VTYSH_PATH, "$quagga_statedir/isisd.vty",isisd vty socket)
+AC_DEFINE_UNQUOTED(XPIMD_VTYSH_PATH, "$quagga_statedir/xpimd.vty",xpimd vty socket)
 AC_DEFINE_UNQUOTED(DAEMON_VTY_DIR, "$quagga_statedir",daemon vty directory)
 
 dnl -------------------------------
@@ -1644,6 +1733,7 @@ AC_CONFIG_FILES([Makefile lib/Makefile zebra/Makefile ripd/Makefile
           doc/Makefile ospfclient/Makefile tests/Makefile m4/Makefile
           redhat/Makefile
 	  pkgsrc/Makefile
+	  xpimd/Makefile
 	  redhat/quagga.spec 
 	  lib/version.h
 	  doc/defines.texi
@@ -1666,6 +1756,8 @@ host operating system   : ${host_os}
 source code location    : ${srcdir}
 compiler                : ${CC}
 compiler flags          : ${CFLAGS}
+C++ compiler            : ${CXX}
+C++ compiler flags      : ${CXXFLAGS}
 make                    : ${MAKE-make}
 includes                : ${INCLUDES} ${SNMP_INCLUDES}
 linker flags            : ${LDFLAGS} ${LIBS} ${LIBCAP} ${LIBREADLINE} ${LIBM}

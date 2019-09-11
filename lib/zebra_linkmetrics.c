@@ -25,45 +25,50 @@
 #include "log.h"
 #include "stream.h"
 #include "zebra_linkmetrics.h"
-#include "lmgenl.h"
 
 /* log the link metrics structure as a debug message */
 void
-zebra_linkmetrics_logdebug (zebra_linkmetrics_t *linkmetrics)
+zebra_linkmetrics_logdebug (const struct zebra_linkmetrics *metrics)
 {
-  char lladdrstr[INET6_ADDRSTRLEN];
+  char addr[INET6_ADDRSTRLEN];
 
-  zlog_debug ("LINKMETRICS:");
-  zlog_debug ("  ifindex: %d", linkmetrics->ifindex);
-  inet_ntop (AF_INET6, &linkmetrics->linklocal_addr,
-	     lladdrstr, sizeof (lladdrstr));
-  zlog_debug ("  ipv6 link-local addr: %s", lladdrstr);
-  zlog_debug ("  rlq: %u", linkmetrics->metrics.rlq);
-  zlog_debug ("  resource: %u", linkmetrics->metrics.resource);
-  zlog_debug ("  latency: %u", linkmetrics->metrics.latency);
-  zlog_debug ("  current_datarate: %u", linkmetrics->metrics.current_datarate);
-  zlog_debug ("  max_datarate: %u", linkmetrics->metrics.max_datarate);
+  zlog_debug ("LINK METRICS:");
+  zlog_debug ("  ifindex: %u", metrics->ifindex);
+  inet_ntop (AF_INET, &metrics->nbr_addr4, addr, sizeof (addr));
+  zlog_debug ("  ipv4 address: %s", addr);
+  inet_ntop (AF_INET6, &metrics->nbr_addr6, addr, sizeof (addr));
+  zlog_debug ("  ipv6 link-local address: %s", addr);
+  zlog_debug ("  flags: 0x%x", metrics->metrics.flags);
+  zlog_debug ("  rlq: %u", metrics->metrics.rlq);
+  zlog_debug ("  resource: %u", metrics->metrics.resource);
+  zlog_debug ("  latency: %u", metrics->metrics.latency);
+  zlog_debug ("  current_datarate: %" PRIu64,
+              metrics->metrics.current_datarate);
+  zlog_debug ("  max_datarate: %" PRIu64, metrics->metrics.max_datarate);
 
   return;
 }
 
 /* serialize a link metrics structure */
 int
-zapi_write_linkmetrics (struct stream *s, zebra_linkmetrics_t *linkmetrics)
+zapi_write_linkmetrics (struct stream *s,
+                        const struct zebra_linkmetrics *metrics)
 {
   /* initialize the stream */
   stream_reset (s);
   zclient_create_header (s, ZEBRA_LINKMETRICS_METRICS);
 
   /* write the linkmetrics structure */
-  stream_putl (s, linkmetrics->ifindex);
-  stream_write (s, (u_char *)&linkmetrics->linklocal_addr,
-               sizeof (linkmetrics->linklocal_addr));
-  stream_putc (s, linkmetrics->metrics.rlq);
-  stream_putc (s, linkmetrics->metrics.resource);
-  stream_putw (s, linkmetrics->metrics.latency);
-  stream_putw (s, linkmetrics->metrics.current_datarate);
-  stream_putw (s, linkmetrics->metrics.max_datarate);
+  stream_putl (s, metrics->ifindex);
+  stream_put_in_addr (s, &metrics->nbr_addr4);
+  stream_write (s, &metrics->nbr_addr6, sizeof (metrics->nbr_addr6));
+
+  stream_putl (s, metrics->metrics.flags);
+  stream_putc (s, metrics->metrics.rlq);
+  stream_putc (s, metrics->metrics.resource);
+  stream_putw (s, metrics->metrics.latency);
+  stream_putq (s, metrics->metrics.current_datarate);
+  stream_putq (s, metrics->metrics.max_datarate);
 
   /* put length at beginning of stream */
   if (stream_putw_at (s, 0, stream_get_endp (s)) != 2)
@@ -74,80 +79,60 @@ zapi_write_linkmetrics (struct stream *s, zebra_linkmetrics_t *linkmetrics)
 
 /* unserialize a link metrics structure */
 int
-zapi_read_linkmetrics (zebra_linkmetrics_t *linkmetrics,
-		      struct stream *s, u_short length)
+zapi_read_linkmetrics (struct zebra_linkmetrics *metrics,
+                       struct stream *s, u_short length)
 {
-  if (length != sizeof (*linkmetrics))
+  if (length != ZAPI_LINKMETRICS_LEN)
     {
       zlog_err ("%s: invalid length: %u", __func__, length);
       return -1;
     }
 
-  linkmetrics->ifindex = stream_getl (s);
-  stream_get (&linkmetrics->linklocal_addr, s,
-	      sizeof (linkmetrics->linklocal_addr));
-  linkmetrics->metrics.rlq = stream_getc (s);
-  linkmetrics->metrics.resource = stream_getc (s);
-  linkmetrics->metrics.latency = stream_getw (s);
-  linkmetrics->metrics.current_datarate = stream_getw (s);
-  linkmetrics->metrics.max_datarate = stream_getw (s);
+  metrics->ifindex = stream_getl (s);
+  metrics->nbr_addr4.s_addr = stream_get_ipv4 (s);
+  stream_get (&metrics->nbr_addr6, s, sizeof (metrics->nbr_addr6));
+
+  metrics->metrics.flags = stream_getl (s);
+  metrics->metrics.rlq = stream_getc (s);
+  metrics->metrics.resource = stream_getc (s);
+  metrics->metrics.latency = stream_getw (s);
+  metrics->metrics.current_datarate = stream_getq (s);
+  metrics->metrics.max_datarate = stream_getq (s);
 
   return 0;
 }
 
-/* returns nonzero if truncated */
-int
-zebra_linkstatus_string (char *str, size_t size, u_int32_t status)
-{
-  int tmp;
-
-  switch (status)
-    {
-    case LM_STATUS_DOWN:
-      tmp = snprintf (str, size, "%s", "DOWN");
-      break;
-
-    case LM_STATUS_UP:
-      tmp = snprintf (str, size, "%s", "UP");
-      break;
-
-    default:
-      tmp = snprintf (str, size, "unknown link status: %u", status);
-      break;
-    }
-
-  return tmp >= (int) size;
-}
-
 /* log the link status structure as a debug message */
 void
-zebra_linkstatus_logdebug (zebra_linkstatus_t *linkstatus)
+zebra_linkstatus_logdebug (const struct zebra_linkstatus *status)
 {
   char str[INET6_ADDRSTRLEN];
 
-  zlog_debug ("LINKSTATUS:");
-  zlog_debug ("  ifindex: %d", linkstatus->ifindex);
-  inet_ntop (AF_INET6, &linkstatus->linklocal_addr, str, sizeof (str));
-  zlog_debug ("  ipv6 link-local addr: %s", str);
-  zebra_linkstatus_string (str, sizeof (str), linkstatus->status);
-  zlog_debug ("  link status: %s", str);
+  zlog_debug ("LINK STATUS:");
+  zlog_debug ("  ifindex: %u", status->ifindex);
+  inet_ntop (AF_INET, &status->nbr_addr4, str, sizeof (str));
+  zlog_debug ("  ipv4 address: %s", str);
+  inet_ntop (AF_INET6, &status->nbr_addr6, str, sizeof (str));
+  zlog_debug ("  ipv6 link-local address: %s", str);
+  zlog_debug ("  link status: %s", status->status ? "up" : "down");
 
   return;
 }
 
 /* serialize a link status structure */
 int
-zapi_write_linkstatus (struct stream *s, zebra_linkstatus_t *linkstatus)
+zapi_write_linkstatus (struct stream *s,
+                       const struct zebra_linkstatus *status)
 {
   /* initialize the stream */
   stream_reset (s);
   zclient_create_header (s, ZEBRA_LINKMETRICS_STATUS);
 
   /* write the linkstatus structure */
-  stream_putl (s, linkstatus->ifindex);
-  stream_write (s, (u_char *)&linkstatus->linklocal_addr,
-		sizeof (linkstatus->linklocal_addr));
-  stream_putl (s, linkstatus->status);
+  stream_putl (s, status->ifindex);
+  stream_put_in_addr (s, &status->nbr_addr4);
+  stream_write (s, &status->nbr_addr6, sizeof (status->nbr_addr6));
+  stream_putc (s, status->status);
 
   /* put length at beginning of stream */
   if (stream_putw_at (s, 0, stream_get_endp (s)) != 2)
@@ -158,19 +143,74 @@ zapi_write_linkstatus (struct stream *s, zebra_linkstatus_t *linkstatus)
 
 /* unserialize a link status structure */
 int
-zapi_read_linkstatus (zebra_linkstatus_t *linkstatus,
-		      struct stream *s, u_short length)
+zapi_read_linkstatus (struct zebra_linkstatus *status,
+                      struct stream *s, u_short length)
 {
-  if (length != sizeof (*linkstatus))
+  if (length != ZAPI_LINKSTATUS_LEN)
     {
       zlog_err ("%s: invalid length: %u", __func__, length);
       return -1;
     }
 
-  linkstatus->ifindex = stream_getl (s);
-  stream_get (&linkstatus->linklocal_addr, s,
-	      sizeof (linkstatus->linklocal_addr));
-  linkstatus->status = stream_getl (s);
+  status->ifindex = stream_getl (s);
+  status->nbr_addr4.s_addr = stream_get_ipv4 (s);
+  stream_get (&status->nbr_addr6, s, sizeof (status->nbr_addr6));
+  status->status = stream_getc (s);
+
+  return 0;
+}
+
+/* log the link metrics request as a debug message */
+void
+zebra_linkmetrics_request_logdebug (const struct zebra_linkmetrics_request *request)
+{
+  char str[INET6_ADDRSTRLEN];
+
+  zlog_debug ("LINK METRICS REQUEST:");
+  zlog_debug ("  ifindex: %u", request->ifindex);
+  inet_ntop (AF_INET, &request->nbr_addr4, str, sizeof (str));
+  zlog_debug ("  ipv4 address: %s", str);
+  inet_ntop (AF_INET6, &request->nbr_addr6, str, sizeof (str));
+  zlog_debug ("  ipv6 link-local address: %s", str);
+
+  return;
+}
+
+/* serialize a link metrics request structure */
+int
+zapi_write_linkmetrics_request (struct stream *s,
+                                const struct zebra_linkmetrics_request *request)
+{
+  /* initialize the stream */
+  stream_reset (s);
+  zclient_create_header (s, ZEBRA_LINKMETRICS_METRICS_REQUEST);
+
+  /* write the link metrics request structure */
+  stream_putl (s, request->ifindex);
+  stream_put_in_addr (s, &request->nbr_addr4);
+  stream_write (s, &request->nbr_addr6, sizeof (request->nbr_addr6));
+
+  /* put length at beginning of stream */
+  if (stream_putw_at (s, 0, stream_get_endp (s)) != 2)
+    zlog_err ("%s: stream_putw_at() failed for setting length", __func__);
+
+  return 0;
+}
+
+/* unserialize a link metrics request structure */
+int
+zapi_read_linkmetrics_request (struct zebra_linkmetrics_request *request,
+                               struct stream *s, u_short length)
+{
+  if (length != ZAPI_LINKMETRICS_REQUEST_LEN)
+    {
+      zlog_err ("%s: invalid length: %u", __func__, length);
+      return -1;
+    }
+
+  request->ifindex = stream_getl (s);
+  request->nbr_addr4.s_addr = stream_get_ipv4 (s);
+  stream_get (&request->nbr_addr6, s, sizeof (request->nbr_addr6));
 
   return 0;
 }

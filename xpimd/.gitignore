@@ -1,0 +1,4 @@
+# ignore generated files
+*.o
+.dirstamp
+xpimd

@@ -1,0 +1,422 @@
+@node Protocol Independent Multicast (PIM)
+@section Protocol Independent Multicast (PIM)
+
+Protocol Independent Multicast (PIM) is a multicast routing protocol.
+Currently, only sparse mode (PIM-SM) is implemented.
+
+@menu
+* PIM Configuration::
+* PIM Information::
+* Example PIM Configuration::
+@end menu
+
+@node PIM Configuration
+@subsection PIM Configuration
+
+PIM is enabled by default, however each interface must be explicitly
+configured.
+
+The following commands are used to configure PIM.
+
+@subsubsection PIM Router Commands
+
+@deffn  {Command} {router pim} {}
+@deffnx {Command} {router pim6} {}
+Enable PIM.
+@end deffn
+
+@deffn  {Command} {no router pim} {}
+@deffnx {Command} {no router pim6} {}
+Disable PIM.
+@end deffn
+
+@deffn  {PIM Command} {ip pim rp-address} A.B.C.D [A.B.C.D/M [@code{priority} 0--255 [@code{hash-mask-length} 4--32]]]
+@deffnx {PIM Command} {ipv6 pim6 rp-address} X:X::X:X [X:X::X:X/M [@code{priority} 0--255 [@code{hash-mask-length} 8--128]]]
+Configure a static Rendezvous Point (RP).  The first argument is
+required and specifies the RP address.  The optional second argument
+is the range of multicast groups for the given RP; the default value
+is all multicast groups (224.0.0.0/4 for IPv4, ff00::/8 for IPv6).
+The priority of the given RP can be set with the @code{priority}
+option (a smaller value has higher priority); the default value is
+192.  The @code{hash-mask-length} option controls the length of the
+mask used when hashing for load balancing; the default value is 30 for
+IPv4, 126 for IPv6.
+@end deffn
+
+@deffn  {PIM Command} {no ip pim rp-address} [A.B.C.D [A.B.C.D/M]]
+@deffnx {PIM Command} {no ipv6 pim6 rp-address} [X:X::X:X [X:X::X:X/M]]
+Remove static Rendezvous Point (RP) configuration.  The first argument
+is an optional RP address; all static RPs are removed if omitted.  The
+optional second argument is a range of multicast groups for the given
+RP.
+@end deffn
+
+@deffn  {PIM Command} {ip pim bsr-candidate} IFNAME [A.B.C.D/M [(@code{scoped}|@code{non-scoped}) [@code{priority} 0--255 [@code{hash-mask-length} 4--32]]]]
+@deffnx {PIM Command} {ipv6 pim6 bsr-candidate} IFNAME [X:X::X:X/M [(@code{scoped}|@code{non-scoped}) [@code{priority} 0--255 [@code{hash-mask-length} 8--128]]]]
+Configure this router as a BootStrap Router (BSR) candidate.  The
+first argument is required and specifies the interface whose address
+is used in bootstrap messages.  The optional second argument is a
+multicast group prefix for this BSR configuration; the default value
+is 224.0.0.0/4 for IPv4, ff00::/8 for IPv6.  The optional third
+argument determines if the previous multicast group prefix refers to a
+multicast scope zone, @code{scoped}, or a range of multicast groups,
+@code{non-scoped}; the default value is @code{non-scoped}.  The BSR
+priority of this router can be set with the @code{priority} option (a
+larger value has higher priority); the default value is 1.  The
+@code{hash-mask-length} option controls the length of the mask used
+when hashing for load balancing; the default value is 30 for IPv4, 126
+for IPv6.
+@end deffn
+
+@deffn  {PIM Command} {no ip pim bsr-candidate} [A.B.C.D/M [(@code{scoped}|@code{non-scoped})]]
+@deffnx {PIM Command} {no ipv6 pim6 bsr-candidate} [X:X::X:X/M [(@code{scoped}|@code{non-scoped})]]
+Remove this router as a BootStrap Router (BSR) candidate.  The
+optional first argument is a multicast group prefix for this BSR
+configuration.  The optional second argument determines if the
+previous multicast group prefix refers to a multicast scope zone,
+@code{scoped}, or a range of multicast groups, @code{non-scoped}; the
+default value is @code{non-scoped}.
+@end deffn
+
+@deffn  {PIM Command} {ip pim rp-candidate} IFNAME [A.B.C.D/M [(@code{scoped}|@code{non-scoped}) [@code{priority} 0--255 [@code{holdtime} 0--65535]]]]
+@deffnx {PIM Command} {ipv6 pim6 rp-candidate} IFNAME [X:X::X:X/M [(@code{scoped}|@code{non-scoped}) [@code{priority} 0--255 [@code{holdtime} 0--65535]]]]
+Configure this router as a RP candidate.  The first argument is
+required and specifies the interface whose address is used as the RP
+candidate.  The optional second argument is a multicast group prefix
+for this configuration; the default value is 224.0.0.0/4 for IPv4,
+ff00::/8 for IPv6.  The optional third argument determines if the
+previous multicast group prefix refers to a multicast scope zone,
+@code{scoped}, or a range of multicast groups, @code{non-scoped}; the
+default value is @code{non-scoped}.  The RP priority of this router
+can be set with the @code{priority} option (a larger value has higher
+priority); the default value is 1.  The @code{holdtime} option sets
+the holdtime advertised to the BSR; the default value is 150 seconds.
+@end deffn
+
+@deffn  {PIM Command} {no ip pim rp-candidate} IFNAME [A.B.C.D/M [(@code{scoped}|@code{non-scoped})]]
+@deffnx {PIM Command} {no ipv6 pim6 rp-candidate} IFNAME [X:X::X:X/M [(@code{scoped}|@code{non-scoped})]]
+Remove this router as a RP candidate.  The first argument is required
+and specifies the interface whose address is the RP candidate.  The
+optional second argument is a multicast group prefix for this
+configuration.  The optional third argument determines if the previous
+multicast group prefix refers to a multicast scope zone,
+@code{scoped}, or a range of multicast groups, @code{non-scoped}; the
+default value is @code{non-scoped}.
+@end deffn
+
+@deffn  {PIM Command} {ip pim spt-threshold} @code{interval} 3--2147483647 @code{bytes} 0--4294967295
+@deffnx {PIM Command} {ipv6 pim6 spt-threshold} @code{interval} 3--2147483647 @code{bytes} 0--4294967295
+Configure the bitrate threshold for switching from the RP tree to the
+source-specific shortest path tree.  The @code{interval} argument
+specifies the measure time in seconds.  The @code{bytes} argument
+specifies the number of bytes received during the measurement interval
+needed to trigger switching to the shortest path tree.
+@end deffn
+
+@deffn  {PIM Command} {no ip pim spt-threshold} {}
+@deffnx {PIM Command} {no ipv6 pim6 spt-threshold} {}
+Disable switching to the shortest path tree when the configured
+bitrate is exceeded.
+@end deffn
+
+@deffn  {PIM Command} {ip pim protocol-type-of-service} 0--255
+@deffnx {PIM Command} {ipv6 pim6 protocol-traffic-class} 0--255
+Configure the IP type of service or IPv6 traffic class used for
+outgoing protocol packets.  The 8-bit type of service or traffic class
+field in the IP/IPv6 header is set to the given value.
+@end deffn
+
+@deffn  {PIM Command} {no ip pim protocol-type-of-service} {}
+@deffnx {PIM Command} {no ipv6 pim6 protocol-traffic-class} {}
+Use the default IP type of service or IPv6 traffic class when sending
+protocol packets.
+@end deffn
+
+@deffn  {PIM Command} {ip pim register-source} IFNAME
+@deffnx {PIM Command} {ipv6 pim6 register-source} IFNAME
+Use a domain-wide address associated with the given network interace
+as the source address of PIM register messages sent to rendezvous
+points (RPs).
+@end deffn
+
+@deffn  {PIM Command} {no ip pim register-source} {}
+@deffnx {PIM Command} {no ipv6 pim6 register-source} {}
+Use a default source address when sending PIM register messages to
+rendezvous points (RPs).
+@end deffn
+
+@subsubsection PIM Interface Commands
+
+@deffn  {Interface Command} {ip pim} {}
+@deffnx {Interface Command} {ipv6 pim6} {}
+Enable PIM for an interface.
+@end deffn
+
+@deffn  {Interface Command} {no ip pim} {}
+@deffnx {Interface Command} {no ipv6 pim6} {}
+Disable PIM for an interface.
+@end deffn
+
+@deffn  {Interface Command} {ip pim version} 2--2
+@deffnx {Interface Command} {ipv6 pim6 version} 2--2
+Set the protocol version.  The default version 2.
+@end deffn
+
+@deffn  {Interface Command} {ip pim ip-router-alert-option-check} {}
+@deffnx {Interface Command} {ipv6 pim6 ip-router-alert-option-check} {}
+Enable IP router alert option checking.  IP router alert option
+checking is disabled by default.
+@end deffn
+
+@deffn  {Interface Command} {no ip pim ip-router-alert-option-check} {}
+@deffnx {Interface Command} {no ipv6 pim6 ip-router-alert-option-check} {}
+Disable IP router alert option checking.  IP router alert option
+checking is disabled by default.
+@end deffn
+
+@deffn  {Interface Command} {ip pim hello-triggered-delay} 1--255
+@deffnx {Interface Command} {ipv6 pim6 hello-triggered-delay} 1--255
+Set the randomized delay (in seconds) before sending the first PIM
+hello message.  The default value is 5 seconds.
+@end deffn
+
+@deffn  {Interface Command} {ip pim hello-interval} 1--18724
+@deffnx {Interface Command} {ipv6 pim6 hello-interval} 1--18724
+Set the PIM hello interval (in seconds).  The default value is 30
+seconds.
+@end deffn
+
+@deffn  {Interface Command} {ip pim hello-holdtime} 0--65535
+@deffnx {Interface Command} {ipv6 pim6 hello-holdtime} 0--65535
+Set the advertised hello holdtime (in seconds).  The default value is
+105 seconds
+@end deffn
+
+@deffn  {Interface Command} {ip pim dr-priority} 0--4294967295
+@deffnx {Interface Command} {ipv6 pim6 dr-priority} 0--4294967295
+Set the Designated Router (DR) priority for an interface.  The default
+value is 1.
+@end deffn
+
+@deffn  {Interface Command} {ip pim propagation-delay} 0--65535
+@deffnx {Interface Command} {ipv6 pim6 propagation-delay} 0--65535
+Set the propagation delay, in milliseconds.  The default value is 500
+msec.
+@end deffn
+
+@deffn  {Interface Command} {ip pim override-interval} 0--65535
+@deffnx {Interface Command} {ipv6 pim6 override-interval} 0--65535
+Set the override interval, in milliseconds.  The default value is 2500
+msec.
+@end deffn
+
+@deffn  {Interface Command} {ip pim is-tracking-support-disabled} {}
+@deffnx {Interface Command} {ipv6 pim6 is-tracking-support-disabled} {}
+Disable tracking support.  Tracking support is enabled by default.
+@end deffn
+
+@deffn  {Interface Command} {no ip pim is-tracking-support-disabled} {}
+@deffnx {Interface Command} {no ipv6 pim6 is-tracking-support-disabled} {}
+Enable tracking support.  Tracking support is enabled by default.
+@end deffn
+
+@deffn  {Interface Command} {ip pim accept-nohello-neighbors} {}
+@deffnx {Interface Command} {ipv6 pim6 accept-nohello-neighbors} {}
+Enable accepting neighbors who haven't sent a hello message first.
+Accepting no-hello neighbors is disabled by default.
+@end deffn
+
+@deffn  {Interface Command} {no ip pim accept-nohello-neighbors} {}
+@deffnx {Interface Command} {no ipv6 pim6 accept-nohello-neighbors} {}
+Disable accepting neighbors who haven't sent a hello message first.
+Accepting no-hello neighbors is disabled by default.
+@end deffn
+
+@deffn  {Interface Command} {ip pim join-prune-interval} 1--65535
+@deffnx {Interface Command} {ipv6 pim6 join-prune-interval} 1--65535
+Set the join/prune interval, in seconds.  The default value is 60
+seconds.
+@end deffn
+
+@deffn  {Interface Command} {ip pim alternative-subnet} A.B.C.D/M
+@deffnx {Interface Command} {ipv6 pim6 alternative-subnet} X:X::X:X/M
+Associate the given subnet with an interface.  Traffic from any
+additional subnets associated with an interface is treated as if
+coming from a local subnet.
+@end deffn
+
+@deffn  {Interface Command} {no ip pim alternative-subnet} [A.B.C.D/M]
+@deffnx {Interface Command} {no ipv6 pim6 alternative-subnet} [X:X::X:X/M]
+Remove an additional subnet association from an interface.  The
+optional argument specifies the subnet to remove from an interface
+(all additional subnets if omitted).
+@end deffn
+
+@subsubsection PIM Debug Commands
+
+@deffn  {Command} {debug pim} {}
+@deffnx {Command} {debug pim6} {}
+Enable PIM debugging.
+@end deffn
+
+@deffn  {Command} {no debug pim} {}
+@deffnx {Command} {no debug pim6} {}
+Disable PIM debugging.
+@end deffn
+
+@deffn  {Command} {debug pim trace} {}
+@deffnx {Command} {debug pim6 trace} {}
+Enable trace-level PIM debugging.
+@end deffn
+
+@deffn  {Command} {no debug pim trace} {}
+@deffnx {Command} {no debug pim6 trace} {}
+Disable trace-level PIM debugging.
+@end deffn
+
+@deffn  {Command} {debug pim neighbor} {}
+@deffnx {Command} {debug pim6 neighbor} {}
+Enable debugging PIM neighbor events.
+@end deffn
+
+@deffn  {Command} {no debug pim neighbor} {}
+@deffnx {Command} {no debug pim6 neighbor} {}
+Disable debugging PIM neighbor events.
+@end deffn
+
+
+@node PIM Information
+@subsection PIM Information
+
+The following commands provide information about PIM.
+
+@subsubsection PIM Information Commands
+
+@deffn  {Command} {show ip pim bsr} [A.B.C.D/M [(@code{scoped}|@code{non-scoped})]]
+@deffnx {Command} {show ipv6 pim6 bsr} [X:X::X:X/M [(@code{scoped}|@code{non-scoped})]]
+Display bootstrap router information.  The first optional argument
+specifies a multicast group prefix for this request; the default value
+is 224.0.0.0/4 for IPv4, ff00::/8 for IPv6.  The optional second
+argument determines if the previous multicast group prefix refers to a
+multicast scope zone, @code{scoped}, or a range of multicast groups,
+@code{non-scoped}; the default value is @code{non-scoped}.
+@end deffn
+
+@deffn  {Command} {show ip pim bsr-rp} [A.B.C.D/M [(@code{scoped}|@code{non-scoped})]]
+@deffnx {Command} {show ipv6 pim6 bsr-rp} [X:X::X:X/M [(@code{scoped}|@code{non-scoped})]]
+Display candidate RP information learned from the bootstrap process.
+The first optional argument specifies a multicast group prefix for
+this request; the default value is 224.0.0.0/4 for IPv4, ff00::/8 for
+IPv6.  The optional second argument determines if the previous
+multicast group prefix refers to a multicast scope zone,
+@code{scoped}, or a range of multicast groups, @code{non-scoped}; the
+default value is @code{non-scoped}.
+@end deffn
+
+@deffn  {Command} {show ip pim interface} [IFNAME]
+@deffnx {Command} {show ipv6 pim6 interface} [IFNAME]
+Display PIM information about interface @var{IFNAME} (all interfaces
+if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim interface-address} [IFNAME]
+@deffnx {Command} {show ipv6 pim6 interface-address} [IFNAME]
+Display address information about PIM interface @var{IFNAME} (all
+interfaces if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim join} [A.B.C.D[/M]]
+@deffnx {Command} {show ipv6 pim6 join} [X:X::X:X[/M]]
+Display PIM multicast routing state information for the given
+multicast group or group range (all groups if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim join-all} [A.B.C.D[/M]]
+@deffnx {Command} {show ipv6 pim6 join-all} [X:X::X:X[/M]]
+Display all PIM multicast routing state information, including
+internal implementation entries, for the given multicast group or
+group range (all groups if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim mfc} [A.B.C.D[/M]]
+@deffnx {Command} {show ipv6 pim6 mfc} [X:X::X:X[/M]]
+Display Multicast Forwarding Cache (MFC) entries for the given
+multicast group or group range (all groups if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim neighbor} [IFNAME]
+@deffnx {Command} {show ipv6 pim6 neighbor} [IFNAME]
+Display PIM neighbor information for the given interface (all
+interfaces if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim mrib} [A.B.C.D]
+@deffnx {Command} {show ipv6 pim6 mrib} [X:X::X:X]
+Display information from the PIM Multicast Routing Information Base
+(MRIB) for the given destination address (all entries if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim rp} [A.B.C.D]
+@deffnx {Command} {show ipv6 pim6 rp} [X:X::X:X]
+Display candidate RP information for the given multicast group (all
+candidate RP information if omitted).
+@end deffn
+
+@deffn  {Command} {show ip pim scope} {}
+@deffnx {Command} {show ipv6 pim6 scope} {}
+Display PIM multicast scope zone information.
+@end deffn
+
+
+@node Example PIM Configuration
+@subsection Example PIM Configuration
+
+Example IPv4 PIM configuration:
+@example
+debug pim
+!
+interface eth0
+  ip pim
+  ip pim version 2
+  ip pim hello-interval 30
+  ip pim dr-priority 1
+  ip pim join-prune-interval 60
+  ip pim alternative-subnet 10.62.1.0/24
+!
+router pim
+  ip pim spt-threshold interval 7 bytes 29
+  ip pim rp-address 1.2.3.4 224.3.2.0/24 priority 10
+@end example
+
+Minimal IPv4 PIM configuration:
+@example
+interface eth0
+  ip pim
+!
+router pim
+@end example
+
+Example IPv6 PIM configuration:
+@example
+debug pim6
+!
+interface eth0
+  ipv6 pim6
+  ipv6 pim6 version 2
+  ipv6 pim6 hello-interval 30
+  ipv6 pim6 dr-priority 1
+  ipv6 pim6 join-prune-interval 60
+  ipv6 pim6 alternative-subnet 2001:8::/64
+!
+router pim6
+  ipv6 pim6 spt-threshold interval 7 bytes 29
+  ipv6 pim6 rp-address 2001:1::1 ff4e::/16 priority 10
+@end example
+
+Minimal IPv6 PIM configuration:
+@example
+interface eth0
+  ipv6 pim6
+!
+router pim6
+@end example

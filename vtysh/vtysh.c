@@ -59,6 +59,9 @@ struct vtysh_client
   { .fd = -1, .name = "bgpd", .flag = VTYSH_BGPD, .path = BGP_VTYSH_PATH},
   { .fd = -1, .name = "isisd", .flag = VTYSH_ISISD, .path = ISIS_VTYSH_PATH},
   { .fd = -1, .name = "babeld", .flag = VTYSH_BABELD, .path = BABEL_VTYSH_PATH},
+#ifdef QUAGGA_MULTICAST
+  { .fd = -1, .name = "xpimd", .flag = VTYSH_XPIMD, .path = XPIMD_VTYSH_PATH},
+#endif  /* QUAGGA_MULTICAST */
 };
 
 #define VTYSH_INDEX_MAX (sizeof(vtysh_client)/sizeof(vtysh_client[0]))
@@ -817,6 +820,26 @@ static struct cmd_node keychain_key_node =
   "%s(config-keychain-key)# "
 };
 
+#ifdef QUAGGA_MULTICAST
+struct cmd_node mfea_node =
+{
+  MFEA_NODE,
+  "%s(config-mfea)# "
+};
+
+struct cmd_node mld6igmp_node =
+{
+  MLD6IGMP_NODE,
+  "%s(config-mld6igmp)# "
+};
+
+struct cmd_node pim_node =
+{
+  PIM_NODE,
+  "%s(config-pim)# "
+};
+#endif  /* QUAGGA_MULTICAST */
+
 /* Defined in lib/vty.c */
 extern struct cmd_node vty_node;
 
@@ -1028,6 +1051,64 @@ DEFUNSH (VTYSH_BABELD,
   return CMD_SUCCESS;
 }
 
+#ifdef QUAGGA_MULTICAST
+DEFUNSH (VTYSH_XPIMD,
+	 router_mfea,
+	 router_mfea_cmd,
+	 "router mfea",
+	 ROUTER_STR
+	 "Multicast Forwarding Engine Abstraction (MFEA)\n")
+{
+  vty->node = MFEA_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_XPIMD,
+	 router_igmp,
+	 router_igmp_cmd,
+	 "router igmp",
+	 ROUTER_STR
+	 "Internet Group Management Protocol (IGMP)\n")
+{
+  vty->node = MLD6IGMP_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_XPIMD,
+	 router_pim,
+	 router_pim_cmd,
+	 "router pim",
+	 ROUTER_STR
+	 "Protocol Independent Multicast (PIM)\n")
+{
+  vty->node = PIM_NODE;
+  return CMD_SUCCESS;
+}
+
+#ifdef HAVE_IPV6
+ALIAS_SH (VTYSH_XPIMD,
+          router_mfea,
+          router_mfea6_cmd,
+          "router mfea6",
+          ROUTER_STR
+          "IPv6 Multicast Forwarding Engine Abstraction (MFEA)\n")
+
+ALIAS_SH (VTYSH_XPIMD,
+          router_igmp,
+          router_mld_cmd,
+          "router mld6",
+          ROUTER_STR
+          "Multicast Listener Discovery (MLD)\n")
+
+ALIAS_SH (VTYSH_XPIMD,
+          router_pim,
+          router_pim6_cmd,
+          "router pim6",
+          ROUTER_STR
+          "Protocol Independent Multicast (PIM)\n")
+#endif	/* HAVE_IPV6 */
+#endif  /* QUAGGA_MULTICAST */
+
 DEFUNSH (VTYSH_ISISD,
 	 router_isis,
 	 router_isis_cmd,
@@ -1122,6 +1203,11 @@ vtysh_exit (struct vty *vty)
     case RMAP_NODE:
     case VTY_NODE:
     case KEYCHAIN_NODE:
+#ifdef QUAGGA_MULTICAST
+    case MFEA_NODE:
+    case MLD6IGMP_NODE:
+    case PIM_NODE:
+#endif  /* QUAGGA_MULTICAST */
       vtysh_execute("end");
       vtysh_execute("configure terminal");
       vty->node = CONFIG_NODE;
@@ -1269,6 +1355,53 @@ ALIAS (vtysh_exit_ospf6d,
        "quit",
        "Exit current mode and down to previous mode\n")
 
+#ifdef QUAGGA_MULTICAST
+DEFUNSH (VTYSH_XPIMD,
+	 vtysh_exit_mfea,
+	 vtysh_exit_mfea_cmd,
+	 "exit",
+	 "Exit current mode and down to previous mode\n")
+{
+  return vtysh_exit (vty);
+}
+
+ALIAS_SH (VTYSH_XPIMD,
+          vtysh_exit_mfea,
+          vtysh_quit_mfea_cmd,
+          "quit",
+          "Exit current mode and down to previous mode\n")
+
+DEFUNSH (VTYSH_XPIMD,
+	 vtysh_exit_mld6igmp,
+	 vtysh_exit_mld6igmp_cmd,
+	 "exit",
+	 "Exit current mode and down to previous mode\n")
+{
+  return vtysh_exit (vty);
+}
+
+ALIAS_SH (VTYSH_XPIMD,
+          vtysh_exit_mld6igmp,
+          vtysh_quit_mld6igmp_cmd,
+          "quit",
+          "Exit current mode and down to previous mode\n")
+
+DEFUNSH (VTYSH_XPIMD,
+	 vtysh_exit_pim,
+	 vtysh_exit_pim_cmd,
+	 "exit",
+	 "Exit current mode and down to previous mode\n")
+{
+  return vtysh_exit (vty);
+}
+
+ALIAS_SH (VTYSH_XPIMD,
+          vtysh_exit_pim,
+          vtysh_quit_pim_cmd,
+          "quit",
+          "Exit current mode and down to previous mode\n")
+#endif  /* QUAGGA_MULTICAST */
+
 DEFUNSH (VTYSH_ISISD,
 	 vtysh_exit_isisd,
 	 vtysh_exit_isisd_cmd,
@@ -1309,7 +1442,12 @@ DEFUNSH (VTYSH_INTERFACE,
 }
 
 /* TODO Implement "no interface command in isisd. */
-DEFSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D,
+DEFSH (
+#ifdef QUAGGA_MULTICAST
+       VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_XPIMD,
+#else
+       VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D,
+#endif  /* QUAGGA_MULTICAST */
        vtysh_no_interface_cmd,
        "no interface IFNAME",
        NO_STR
@@ -2226,9 +2364,9 @@ void
 vtysh_readline_init (void)
 {
   /* readline related settings. */
-  rl_bind_key ('?', (Function *) vtysh_rl_describe);
+  rl_bind_key ('?', (rl_command_func_t *) vtysh_rl_describe);
   rl_completion_entry_function = vtysh_completion_entry_function;
-  rl_attempted_completion_function = (CPPFunction *)new_completion;
+  rl_attempted_completion_function = (rl_completion_func_t *)new_completion;
   /* do not append space after completion. It will be appended
    * in new_completion() function explicitly. */
   rl_completion_append_character = '\0';
@@ -2290,6 +2428,11 @@ vtysh_init_vty (void)
   install_node (&keychain_key_node, NULL);
   install_node (&isis_node, NULL);
   install_node (&vty_node, NULL);
+#ifdef QUAGGA_MULTICAST
+  install_node (&mfea_node, NULL);
+  install_node (&mld6igmp_node, NULL);
+  install_node (&pim_node, NULL);
+#endif  /* QUAGGA_MULTICAST */
 
   vtysh_install_default (VIEW_NODE);
   vtysh_install_default (ENABLE_NODE);
@@ -2312,6 +2455,11 @@ vtysh_init_vty (void)
   vtysh_install_default (KEYCHAIN_NODE);
   vtysh_install_default (KEYCHAIN_KEY_NODE);
   vtysh_install_default (VTY_NODE);
+#ifdef QUAGGA_MULTICAST
+  vtysh_install_default (MFEA_NODE);
+  vtysh_install_default (MLD6IGMP_NODE);
+  vtysh_install_default (PIM_NODE);
+#endif  /* QUAGGA_MULTICAST */
 
   install_element (VIEW_NODE, &vtysh_enable_cmd);
   install_element (ENABLE_NODE, &vtysh_config_terminal_cmd);
@@ -2354,6 +2502,14 @@ vtysh_init_vty (void)
   install_element (RMAP_NODE, &vtysh_quit_rmap_cmd);
   install_element (VTY_NODE, &vtysh_exit_line_vty_cmd);
   install_element (VTY_NODE, &vtysh_quit_line_vty_cmd);
+#ifdef QUAGGA_MULTICAST
+  install_element (MFEA_NODE, &vtysh_exit_mfea_cmd);
+  install_element (MFEA_NODE, &vtysh_quit_mfea_cmd);
+  install_element (MLD6IGMP_NODE, &vtysh_exit_mld6igmp_cmd);
+  install_element (MLD6IGMP_NODE, &vtysh_quit_mld6igmp_cmd);
+  install_element (PIM_NODE, &vtysh_exit_pim_cmd);
+  install_element (PIM_NODE, &vtysh_quit_pim_cmd);
+#endif  /* QUAGGA_MULTICAST */
 
   /* "end" command. */
   install_element (CONFIG_NODE, &vtysh_end_all_cmd);
@@ -2374,6 +2530,11 @@ vtysh_init_vty (void)
   install_element (KEYCHAIN_KEY_NODE, &vtysh_end_all_cmd);
   install_element (RMAP_NODE, &vtysh_end_all_cmd);
   install_element (VTY_NODE, &vtysh_end_all_cmd);
+#ifdef QUAGGA_MULTICAST
+  install_element (MFEA_NODE, &vtysh_end_all_cmd);
+  install_element (MLD6IGMP_NODE, &vtysh_end_all_cmd);
+  install_element (PIM_NODE, &vtysh_end_all_cmd);
+#endif  /* QUAGGA_MULTICAST */
 
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
@@ -2417,6 +2578,16 @@ vtysh_init_vty (void)
   install_element (ENABLE_NODE, &vtysh_copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &vtysh_write_file_cmd);
   install_element (ENABLE_NODE, &vtysh_write_cmd);
+#ifdef QUAGGA_MULTICAST
+  install_element (CONFIG_NODE, &router_mfea_cmd);
+  install_element (CONFIG_NODE, &router_igmp_cmd);
+  install_element (CONFIG_NODE, &router_pim_cmd);
+#ifdef HAVE_IPV6
+  install_element (CONFIG_NODE, &router_mfea6_cmd);
+  install_element (CONFIG_NODE, &router_mld_cmd);
+  install_element (CONFIG_NODE, &router_pim6_cmd);
+#endif	/* HAVE_IPV6 */
+#endif  /* QUAGGA_MULTICAST */
 
   /* "write terminal" command. */
   install_element (ENABLE_NODE, &vtysh_write_terminal_cmd);

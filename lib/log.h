@@ -23,6 +23,7 @@
 #ifndef _ZEBRA_LOG_H
 #define _ZEBRA_LOG_H
 
+#include <stdio.h>
 #include <syslog.h>
 
 /* Here is some guidance on logging levels to use:
@@ -53,7 +54,12 @@ typedef enum
   ZLOG_BABEL,
   ZLOG_OSPF6,
   ZLOG_ISIS,
-  ZLOG_MASC
+  ZLOG_MASC,
+#ifdef QUAGGA_MULTICAST
+  ZLOG_MFEA,
+  ZLOG_MLD6IGMP,
+  ZLOG_PIM,
+#endif  /* QUAGGA_MULTICAST */
 } zlog_proto_t;
 
 /* If maxlvl is set to ZLOG_DISABLED, then no messages will be sent

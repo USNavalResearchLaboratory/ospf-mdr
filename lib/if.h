@@ -23,6 +23,10 @@ Boston, MA 02111-1307, USA.  */
 
 #include "linklist.h"
 
+#ifdef __cplusplus
+#define list __quagga_list
+#endif /* __cplusplus */
+
 /*
   Interface name length.
 
@@ -257,13 +261,13 @@ extern void if_delete_retain (struct interface *);
    deletes it from the interface list and frees the structure. */
 extern void if_delete (struct interface *);
 
-extern int if_is_up (struct interface *);
-extern int if_is_running (struct interface *);
-extern int if_is_operative (struct interface *);
-extern int if_is_loopback (struct interface *);
-extern int if_is_broadcast (struct interface *);
-extern int if_is_pointopoint (struct interface *);
-extern int if_is_multicast (struct interface *);
+extern int if_is_up (const struct interface *);
+extern int if_is_running (const struct interface *);
+extern int if_is_operative (const struct interface *);
+extern int if_is_loopback (const struct interface *);
+extern int if_is_broadcast (const struct interface *);
+extern int if_is_pointopoint (const struct interface *);
+extern int if_is_multicast (const struct interface *);
 extern void if_add_hook (int, int (*)(struct interface *));
 extern void if_init (void);
 extern void if_terminate (void);
@@ -308,5 +312,9 @@ extern struct cmd_element no_interface_cmd;
 extern struct cmd_element interface_pseudo_cmd;
 extern struct cmd_element no_interface_pseudo_cmd;
 extern struct cmd_element show_address_cmd;
+
+#ifdef __cplusplus
+#undef list
+#endif /* __cplusplus */
 
 #endif /* _ZEBRA_IF_H */

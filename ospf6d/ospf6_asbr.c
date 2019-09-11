@@ -362,6 +362,15 @@ ospf6_asbr_lsentry_remove (struct ospf6_route *asbr_entry)
   u_int16_t type;
   u_int32_t router;
 
+  if (! CHECK_FLAG (asbr_entry->flag, OSPF6_ROUTE_BEST))
+    {
+      char buf[16];
+      ospf6_id2str (ospf6_adv_router_in_prefix (&asbr_entry->prefix),
+		    buf, sizeof (buf));
+       zlog_info ("ignore non-best path: lsentry %s remove", buf);
+      return;
+    }
+
   type = htons (OSPF6_LSTYPE_AS_EXTERNAL);
   router = ospf6_linkstate_prefix_adv_router (&asbr_entry->prefix);
   for (lsa = ospf6_lsdb_type_router_head (type, router, ospf6->lsdb);
