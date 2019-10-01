@@ -10,6 +10,7 @@ texinfo.tex
 quagga.html
 quagga.info
 *.pdf
+!quagga.pdf
 *.eps
 quagga.ps
 quagga.dvi
