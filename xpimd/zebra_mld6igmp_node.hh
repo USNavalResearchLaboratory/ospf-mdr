@@ -76,6 +76,29 @@ public:
     void zebra_client_register();
     void zebra_client_unregister();
 
+    void zebra_ipv4_route_add(const struct prefix_ipv4 *p,
+			      u_char numnexthop,
+			      const struct in_addr *nexthop,
+			      const u_int32_t *ifindex,
+			      u_int32_t metric);
+    void zebra_ipv4_route_del(const struct prefix_ipv4 *p,
+			      u_char numnexthop,
+			      const struct in_addr *nexthop,
+			      const u_int32_t *ifindex,
+			      u_int32_t metric);
+#ifdef HAVE_IPV6_MULTICAST
+    void zebra_ipv6_route_add(const struct prefix_ipv6 *p,
+			      u_char numnexthop,
+			      const struct in6_addr *nexthop,
+			      const u_int32_t *ifindex,
+			      u_int32_t metric);
+    void zebra_ipv6_route_del(const struct prefix_ipv6 *p,
+			      u_char numnexthop,
+			      const struct in6_addr *nexthop,
+			      const u_int32_t *ifindex,
+			      u_int32_t metric);
+#endif	// HAVE_IPV6_MULTICAST
+
     // ProtoNode methods
     int proto_send(const string& dst_module_instance_name,
 		   xorp_module_id dst_module_id, uint32_t vif_index,

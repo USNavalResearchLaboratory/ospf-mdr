@@ -258,12 +258,362 @@ ZebraMld6igmpNode::xorp_protostr() const
 void
 ZebraMld6igmpNode::zebra_client_register()
 {
+    // we only care about route updates; we don't care about interface
+    // information (that comes from the MFEA)
+
+#define ADD_ZEBRA_ROUTER_CB(cbname, cbfunc)				\
+    do {								\
+	_zebra_router_node.add_ ## cbname ## _cb(callback(this,		\
+							  &ZebraMld6igmpNode::cbfunc)); \
+    } while (0)
+
+    ADD_ZEBRA_ROUTER_CB(ipv4_rt_add, zebra_ipv4_route_add);
+    ADD_ZEBRA_ROUTER_CB(ipv4_rt_del, zebra_ipv4_route_del);
+#ifdef HAVE_IPV6_MULTICAST
+    ADD_ZEBRA_ROUTER_CB(ipv6_rt_add, zebra_ipv6_route_add);
+    ADD_ZEBRA_ROUTER_CB(ipv6_rt_del, zebra_ipv6_route_del);
+#endif	// HAVE_IPV6_MULTICAST
+
+#undef ADD_ZEBRA_ROUTER_CB
 }
 
 void
 ZebraMld6igmpNode::zebra_client_unregister()
 {
+    // we only care about interface information; we don't care about
+    // route updates
+
+#define DEL_ZEBRA_ROUTER_CB(cbname, cbfunc)				\
+    do {								\
+	_zebra_router_node.del_ ## cbname ## _cb(callback(this,		\
+							  &ZebraMld6igmpNode::cbfunc)); \
+    } while (0)
+
+    DEL_ZEBRA_ROUTER_CB(ipv4_rt_add, zebra_ipv4_route_add);
+    DEL_ZEBRA_ROUTER_CB(ipv4_rt_del, zebra_ipv4_route_del);
+#ifdef HAVE_IPV6_MULTICAST
+    DEL_ZEBRA_ROUTER_CB(ipv6_rt_add, zebra_ipv6_route_add);
+    DEL_ZEBRA_ROUTER_CB(ipv6_rt_del, zebra_ipv6_route_del);
+#endif	// HAVE_IPV6_MULTICAST
+
+#undef DEL_ZEBRA_ROUTER_CB
 }
+
+void
+ZebraMld6igmpNode::zebra_ipv4_route_add(const struct prefix_ipv4 *p,
+					u_char numnexthop,
+					const struct in_addr *nexthop,
+					const u_int32_t *ifindex,
+					u_int32_t metric)
+{
+    if (p->family != Mld6igmpNode::family())
+	return;
+
+    XLOG_ASSERT(p->family == AF_INET);
+
+    IPvXNet dst_prefix(IPvX(p->family, (uint8_t *)&p->prefix.s_addr),
+		       p->prefixlen);
+    // ignore the default route
+    if (!dst_prefix.is_valid())
+	return;
+
+    Mrib mrib(dst_prefix);
+    mrib.set_metric(metric);
+    mrib.set_metric_preference(0); // XXX
+
+    for (unsigned int i = 0; i < numnexthop; i++)
+    {
+	struct interface *ifp = if_lookup_by_index(ifindex[i]);
+	if (ifp == NULL)
+	{
+	    XLOG_WARNING("unknown ifindex: %u", ifindex[i]);
+	    continue;
+	}
+
+	Mld6igmpVif *vif = vif_find_by_name(ifp->name);
+
+	IPvX next_hop(AF_INET, (uint8_t *)&nexthop[i].s_addr);
+	if (next_hop.is_zero())
+	{
+	    const IPvX &dst_addr = dst_prefix.masked_addr();
+	    if (dst_prefix.prefix_len() == dst_addr.addr_bitlen() &&
+		(vif == NULL || !vif->is_my_addr(dst_addr)))
+	    {
+		next_hop = dst_addr;
+	    }
+#if 0				// XXX
+	    // this probably isn't needed, but it makes the mrib more like the
+	    // native XORP case
+	    else
+	    {
+		struct listnode *n;
+		struct connected *c;
+
+		for (ALL_LIST_ELEMENTS_RO(ifp->connected, n, c))
+		    {
+			if (c->address->family != AF_INET)
+			    continue;
+			// XXX are any other checks needed?
+
+			next_hop = IPvX(AF_INET,
+					(uint8_t *)&c->address->u.prefix4.s_addr);
+			if (!next_hop.is_zero())
+			    break;
+		    }
+	    }
+#endif	// 0
+	}
+
+	mrib.set_next_hop_router_addr(next_hop);
+	if (vif != NULL)
+	    mrib.set_next_hop_vif_index(vif->vif_index());
+
+	break;	       // XXX Only one next-hop is currently supported
+    }
+
+    MribTable& table = mrib_table();
+    table.add_pending_insert(0, mrib);
+    table.commit_pending_transactions(0);
+}
+
+void
+ZebraMld6igmpNode::zebra_ipv4_route_del(const struct prefix_ipv4 *p,
+					u_char numnexthop,
+					const struct in_addr *nexthop,
+					const u_int32_t *ifindex,
+					u_int32_t metric)
+{
+    if (p->family != Mld6igmpNode::family())
+	return;
+
+    XLOG_ASSERT(p->family == AF_INET);
+
+    IPvXNet dst_prefix(IPvX(p->family, (uint8_t *)&p->prefix.s_addr),
+		       p->prefixlen);
+
+    Mrib mrib(dst_prefix);
+    mrib.set_metric(metric);
+    mrib.set_metric_preference(0); // XXX
+
+    for (unsigned int i = 0; i < numnexthop; i++)
+    {
+	struct interface *ifp = if_lookup_by_index(ifindex[i]);
+
+	Mld6igmpVif *vif = NULL;
+	if (ifp != NULL)
+	    vif = vif_find_by_name(ifp->name);
+	if (vif == NULL)
+	    vif = vif_find_by_pif_index(ifindex[i]);
+
+	IPvX next_hop(AF_INET, (uint8_t *)&nexthop[i].s_addr);
+	if (next_hop.is_zero())
+	{
+	    const IPvX &dst_addr = dst_prefix.masked_addr();
+	    if (dst_prefix.prefix_len() == dst_addr.addr_bitlen() &&
+		(vif == NULL || !vif->is_my_addr(dst_addr)))
+	    {
+		next_hop = dst_addr;
+	    }
+#if 0				// XXX
+	    // this probably isn't needed, but it makes the mrib more like the
+	    // native XORP case
+	    else if (ifp != NULL)
+	    {
+		struct listnode *n;
+		struct connected *c;
+
+		for (ALL_LIST_ELEMENTS_RO(ifp->connected, n, c))
+		{
+		    if (c->address->family != AF_INET)
+			continue;
+		    // XXX are any other checks needed?
+
+		    next_hop = IPvX(AF_INET,
+				    (uint8_t *)&c->address->u.prefix4.s_addr);
+		    if (!next_hop.is_zero())
+			break;
+		}
+	    }
+#endif	// 0
+	}
+
+	mrib.set_next_hop_router_addr(next_hop);
+	if (vif != NULL)
+	    mrib.set_next_hop_vif_index(vif->vif_index());
+
+	break;	       // XXX Only one next-hop is currently supported
+    }
+
+    MribTable& table = mrib_table();
+    table.add_pending_remove(0, mrib);
+    table.commit_pending_transactions(0);
+}
+
+#ifdef HAVE_IPV6_MULTICAST
+void
+ZebraMld6igmpNode::zebra_ipv6_route_add(const struct prefix_ipv6 *p,
+					u_char numnexthop,
+					const struct in6_addr *nexthop,
+					const u_int32_t *ifindex,
+					u_int32_t metric)
+{
+    if (p->family != Mld6igmpNode::family())
+	return;
+
+    XLOG_ASSERT(p->family == AF_INET6);
+
+    IPvXNet dst_prefix(IPvX(p->family, (uint8_t *)&p->prefix.s6_addr),
+		       p->prefixlen);
+    // ignore the default route
+    if (!dst_prefix.is_valid())
+	return;
+
+    Mrib mrib(dst_prefix);
+    mrib.set_metric(metric);
+    mrib.set_metric_preference(0); // XXX
+
+    for (unsigned int i = 0; i < numnexthop; i++)
+    {
+	struct interface *ifp = if_lookup_by_index(ifindex[i]);
+	if (ifp == NULL)
+	{
+	    XLOG_WARNING("unknown ifindex: %u", ifindex[i]);
+	    continue;
+	}
+
+	Mld6igmpVif *vif = vif_find_by_name(ifp->name);
+
+	IPvX next_hop(AF_INET6, (uint8_t *)&nexthop[i].s6_addr);
+	if (next_hop.is_zero())
+	{
+	    const IPvX &dst_addr = dst_prefix.masked_addr();
+	    if (dst_prefix.prefix_len() == dst_addr.addr_bitlen() &&
+		(vif == NULL || !vif->is_my_addr(dst_addr)))
+	    {
+		next_hop = dst_addr;
+	    }
+#if 0				// XXX
+	    // this probably isn't needed, but it makes the mrib more like the
+	    // native XORP case
+	    else
+	    {
+		struct listnode *n;
+		struct connected *c;
+
+		for (ALL_LIST_ELEMENTS_RO(ifp->connected, n, c))
+		    {
+			if (c->address->family != AF_INET6)
+			    continue;
+
+			if (IN6_IS_ADDR_LINKLOCAL(&c->address->u.prefix6.s6_addr))
+			    continue;
+
+			if (IN6_IS_ADDR_SITELOCAL(&c->address->u.prefix6.s6_addr))
+			    continue;
+
+			// XXX are any other checks needed?
+
+			next_hop = IPvX(AF_INET6,
+					(uint8_t *)&c->address->u.prefix6.s6_addr);
+			if (!next_hop.is_zero())
+			    break;
+		    }
+	    }
+#endif	// 0
+	}
+
+	mrib.set_next_hop_router_addr(next_hop);
+	if (vif != NULL)
+	    mrib.set_next_hop_vif_index(vif->vif_index());
+
+	break;	       // XXX Only one next-hop is currently supported
+    }
+
+    MribTable& table = mrib_table();
+    table.add_pending_insert(0, mrib);
+    table.commit_pending_transactions(0);
+}
+
+void
+ZebraMld6igmpNode::zebra_ipv6_route_del(const struct prefix_ipv6 *p,
+					u_char numnexthop,
+					const struct in6_addr *nexthop,
+					const u_int32_t *ifindex,
+					u_int32_t metric)
+{
+    if (p->family != Mld6igmpNode::family())
+	return;
+
+    XLOG_ASSERT(p->family == AF_INET6);
+
+    IPvXNet dst_prefix(IPvX(p->family, (uint8_t *)&p->prefix.s6_addr),
+		       p->prefixlen);
+
+    Mrib mrib(dst_prefix);
+    mrib.set_metric(metric);
+    mrib.set_metric_preference(0); // XXX
+
+    for (unsigned int i = 0; i < numnexthop; i++)
+    {
+	struct interface *ifp = if_lookup_by_index(ifindex[i]);
+
+	Mld6igmpVif *vif = NULL;
+	if (ifp != NULL)
+	    vif = vif_find_by_name(ifp->name);
+	if (vif == NULL)
+	    vif = vif_find_by_pif_index(ifindex[i]);
+
+	IPvX next_hop(AF_INET6, (uint8_t *)&nexthop[i].s6_addr);
+	if (next_hop.is_zero())
+	{
+	    const IPvX &dst_addr = dst_prefix.masked_addr();
+	    if (dst_prefix.prefix_len() == dst_addr.addr_bitlen() &&
+		(vif == NULL || !vif->is_my_addr(dst_addr)))
+	    {
+		next_hop = dst_addr;
+	    }
+#if 0				// XXX
+	    // this probably isn't needed, but it makes the mrib more like the
+	    // native XORP case
+	    else if (ifp != NULL)
+	    {
+		struct listnode *n;
+		struct connected *c;
+
+		for (ALL_LIST_ELEMENTS_RO(ifp->connected, n, c))
+		{
+		    if (c->address->family != AF_INET6)
+			continue;
+
+		    if (IN6_IS_ADDR_LINKLOCAL(&c->address->u.prefix6.s6_addr))
+			continue;
+
+		    if (IN6_IS_ADDR_SITELOCAL(&c->address->u.prefix6.s6_addr))
+			continue;
+
+		    // XXX are any other checks needed?
+
+		    next_hop = IPvX(AF_INET6,
+				    (uint8_t *)&c->address->u.prefix6.s6_addr);
+		    if (!next_hop.is_zero())
+			break;
+		}
+	    }
+#endif	// 0
+	}
+
+	mrib.set_next_hop_router_addr(next_hop);
+	if (vif != NULL)
+	    mrib.set_next_hop_vif_index(vif->vif_index());
+
+	break;	       // XXX Only one next-hop is currently supported
+    }
+
+    MribTable& table = mrib_table();
+    table.add_pending_remove(0, mrib);
+    table.commit_pending_transactions(0);
+}
+#endif	// HAVE_IPV6_MULTICAST
 
 int
 ZebraMld6igmpNode::proto_send(const string& dst_module_instance_name,

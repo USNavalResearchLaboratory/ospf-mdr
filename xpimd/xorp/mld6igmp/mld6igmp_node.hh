@@ -29,6 +29,7 @@
 #include "libproto/proto_node.hh"
 #include "mrt/buffer.h"
 #include "mrt/multicast_defs.h"
+#include "mrt/mrib_table.hh"
 
 
 //
@@ -567,6 +568,14 @@ public:
     bool is_directly_connected(const Mld6igmpVif& mld6igmp_vif,
 			       const IPvX& ipaddr_test) const;
 
+    /**
+     * Get the table with the Multicast Routing Information Base.
+     *
+     * @return a reference to the table with the Multicast Routing Information
+     * Base (@ref MribTable).
+     */
+    MribTable& mrib_table()	{ return (_mrib_table);	}
+
     //
     // Configuration methods
     //
@@ -901,6 +910,8 @@ private:
 
     buffer_t	*_buffer_recv;		// Buffer for receiving messages
     
+    MribTable _mrib_table;
+
     //
     // Status-related state
     //

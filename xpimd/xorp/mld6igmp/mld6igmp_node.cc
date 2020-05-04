@@ -68,6 +68,7 @@
 Mld6igmpNode::Mld6igmpNode(int family, xorp_module_id module_id,
 			   EventLoop& eventloop)
     : ProtoNode<Mld6igmpVif>(family, module_id, eventloop),
+      _mrib_table(family),
 #ifndef QUAGGA_MULTICAST
       _is_log_trace(false)
 #else
@@ -1203,6 +1204,16 @@ Mld6igmpNode::is_directly_connected(const Mld6igmpVif& mld6igmp_vif,
     //
     // Test the same subnet addresses, or the P2P addresses
     //
-    return (mld6igmp_vif.is_same_subnet(ipaddr_test)
-	    || mld6igmp_vif.is_same_p2p(ipaddr_test));
+    if (mld6igmp_vif.is_same_subnet(ipaddr_test)
+	|| mld6igmp_vif.is_same_p2p(ipaddr_test))
+	return true;
+
+    const Mrib *mrib = _mrib_table.find(ipaddr_test);
+    if (mrib != NULL) {
+	if (mrib->next_hop_vif_index() == mld6igmp_vif.vif_index()
+	    && mrib->next_hop_router_addr() == ipaddr_test)
+	    return true;
+    }
+
+    return false;
 }
