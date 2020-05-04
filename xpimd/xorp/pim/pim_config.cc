@@ -246,6 +246,93 @@ PimNode::reset_vif_proto_version(const string& vif_name, string& error_msg)
 }
 
 int
+PimNode::get_vif_passive(const string& vif_name,
+			 bool& passive,
+			 string& error_msg)
+{
+    PimVif *pim_vif = vif_find_by_name(vif_name);
+
+    if (pim_vif == NULL) {
+	error_msg = c_format("Cannot get Passive flag for vif %s: "
+			     "no such vif",
+			     vif_name.c_str());
+	return (XORP_ERROR);
+    }
+
+    passive = pim_vif->passive().get();
+
+    return (XORP_OK);
+}
+
+int
+PimNode::set_vif_passive(const string& vif_name,
+			 bool passive,
+			 string& error_msg)
+{
+    PimVif *pim_vif = vif_find_by_name(vif_name);
+
+    if (start_config(error_msg) != XORP_OK)
+	return (XORP_ERROR);
+
+    if (pim_vif == NULL) {
+	end_config(error_msg);
+	error_msg = c_format("Cannot set Passive flag for vif %s: "
+			     "no such vif",
+			     vif_name.c_str());
+	XLOG_ERROR("%s", error_msg.c_str());
+	return (XORP_ERROR);
+    }
+
+    bool prev_passive = pim_vif->passive().get();
+    pim_vif->passive().set(passive);
+
+    if (prev_passive && !passive) {
+	pim_vif->pim_hello_start();
+    } else if (!prev_passive && passive) {
+	pim_vif->pim_passive();
+    }
+
+    if (end_config(error_msg) != XORP_OK)
+	return (XORP_ERROR);
+
+    return (XORP_OK);
+}
+
+int
+PimNode::reset_vif_passive(const string& vif_name,
+			   string& error_msg)
+{
+    PimVif *pim_vif = vif_find_by_name(vif_name);
+
+    if (start_config(error_msg) != XORP_OK)
+	return (XORP_ERROR);
+
+    if (pim_vif == NULL) {
+	end_config(error_msg);
+	error_msg = c_format("Cannot reset Passive flag for vif %s: "
+			     "no such vif",
+			     vif_name.c_str());
+	XLOG_ERROR("%s", error_msg.c_str());
+	return (XORP_ERROR);
+    }
+
+    bool prev_passive = pim_vif->passive().get();
+    pim_vif->passive().reset();
+    bool passive = pim_vif->passive().get();
+
+    if (prev_passive && !passive) {
+	pim_vif->pim_hello_start();
+    } else if (!prev_passive && passive) {
+	pim_vif->pim_passive();
+    }
+
+    if (end_config(error_msg) != XORP_OK)
+	return (XORP_ERROR);
+
+    return (XORP_OK);
+}
+
+int
 PimNode::get_vif_ip_router_alert_option_check(const string& vif_name,
 					      bool& enabled,
 					      string& error_msg)

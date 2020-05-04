@@ -256,6 +256,10 @@ public:
      */
     const IPvX&	dr_addr() const		{ return (_dr_addr);		}
 
+    void	pim_passive();
+
+    ConfigParam<bool>& passive() { return (_passive); }
+
     /**
      * Optain a reference to the "IP Router Alert option check" flag.
      *
@@ -550,6 +554,7 @@ private:
     //
     // Misc configuration parameters
     //
+    ConfigParam<bool> _passive;
     ConfigParam<bool> _ip_router_alert_option_check; // The IP Router Alert option check flag
 
     //

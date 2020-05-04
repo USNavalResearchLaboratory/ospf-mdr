@@ -105,6 +105,7 @@ ZebraPimVifConfig::clear_all_applied() const
 {
     enabled.clear_applied();
     proto_version.clear_applied();
+    passive.clear_applied();
     ip_router_alert_option_check.clear_applied();
     hello_triggered_delay.clear_applied();
     hello_period.clear_applied();
@@ -1233,6 +1234,7 @@ ZebraPimNode::apply_config(const string &vif_name)
     } while (0)
 
     APPLY_CONFIG(set_vif_proto_version, proto_version);
+    APPLY_CONFIG(set_vif_passive, passive);
     APPLY_CONFIG(set_vif_ip_router_alert_option_check,
 		 ip_router_alert_option_check);
     APPLY_CONFIG(set_vif_hello_triggered_delay, hello_triggered_delay);

@@ -980,6 +980,11 @@ ZebraPimNode::zebra_config_write_interface(struct vty *vty,
 		 vty_out(vty, " %s %s version %d%s",
 			 zebra_ipstr(), zebra_protostr(), tmpint, VNL));
 
+    WRITE_CONFIG(get_vif_passive, tmpbool,
+		 if (tmpbool)
+		     vty_out(vty, " %s %s passive%s",
+			     zebra_ipstr(), zebra_protostr(), VNL));
+
     WRITE_CONFIG(get_vif_ip_router_alert_option_check, tmpbool,
 		 if (tmpbool)
 		     vty_out(vty, " %s %s ip-router-alert-option-check%s",
@@ -1217,6 +1222,106 @@ ALIAS(ip_pim_version,
       ZPIM6_STR
       "PIM version\n"
       "Protocol version\n");
+
+#endif	// HAVE_IPV6_MULTICAST
+
+static int
+zpim_ip_pim_passive(ZebraPimNode *zpim, struct vty *vty,
+		    int argc, const char *argv[])
+{
+    XLOG_ASSERT(zpim != NULL);
+
+    struct interface *ifp = (struct interface *)vty->index;
+    XLOG_ASSERT(ifp != NULL);
+
+    zpim->get_if_config(ifp->name).passive.set(true);
+
+    // try to set now if the interface exists
+    if (zpim->vif_find_by_name(ifp->name) != NULL)
+    {
+	string error_msg;
+	if (zpim->set_vif_passive(ifp->name, true, error_msg) != XORP_OK)
+	{
+	    vty_out(vty, "couldn't set passive for interface %s to true: %s%s",
+		    ifp->name, error_msg.c_str(), VNL);
+
+	    return CMD_WARNING;
+	}
+    }
+
+    return CMD_SUCCESS;
+}
+
+static int
+zpim_no_ip_pim_passive(ZebraPimNode *zpim, struct vty *vty,
+		       int argc, const char *argv[])
+{
+    XLOG_ASSERT(zpim != NULL);
+
+    struct interface *ifp = (struct interface *)vty->index;
+    XLOG_ASSERT(ifp != NULL);
+
+    zpim->get_if_config(ifp->name).passive.set(false);
+
+    // try to set now if the interface exists
+    if (zpim->vif_find_by_name(ifp->name) != NULL)
+    {
+	string error_msg;
+	if (zpim->set_vif_passive(ifp->name, false, error_msg) != XORP_OK)
+	{
+	    vty_out(vty, "couldn't set passive for interface %s to false: %s%s",
+		    ifp->name, error_msg.c_str(), VNL);
+
+	    return CMD_WARNING;
+	}
+    }
+
+    return CMD_SUCCESS;
+}
+
+DEFUN(ip_pim_passive,
+      ip_pim_passive_cmd,
+      "ip pim passive",
+      IP_STR
+      ZPIM_STR
+      "Passive interface\n")
+{
+    ZebraPimNode *zpim = _zpim;
+    XLOG_ASSERT(zpim != NULL);
+
+    return zpim_ip_pim_passive(zpim, vty, argc, argv);
+}
+
+DEFUN(no_ip_pim_passive,
+      no_ip_pim_passive_cmd,
+      "no ip pim passive",
+      NO_STR
+      IP_STR
+      ZPIM_STR
+      "Passive interface\n")
+{
+    ZebraPimNode *zpim = _zpim;
+    XLOG_ASSERT(zpim != NULL);
+
+    return zpim_no_ip_pim_passive(zpim, vty, argc, argv);
+}
+
+#ifdef HAVE_IPV6_MULTICAST
+
+ALIAS(ip_pim_passive,
+      ipv6_pim6_passive_cmd,
+      "ipv6 pim6 passive",
+      IP6_STR
+      ZPIM6_STR
+      "Passive interface\n");
+
+ALIAS(no_ip_pim_passive,
+      no_ipv6_pim6_passive_cmd,
+      "no ipv6 pim6 passive",
+      NO_STR
+      IP6_STR
+      ZPIM6_STR
+      "Passive interface\n");
 
 #endif	// HAVE_IPV6_MULTICAST
 
@@ -3163,6 +3268,8 @@ zebra_command_init_pimsm(ZebraPimNode *zpim, int family)
 	install_element(INTERFACE_NODE, &ip_pim_cmd);
 	install_element(INTERFACE_NODE, &no_ip_pim_cmd);
 	install_element(INTERFACE_NODE, &ip_pim_version_cmd);
+	install_element(INTERFACE_NODE, &ip_pim_passive_cmd);
+	install_element(INTERFACE_NODE, &no_ip_pim_passive_cmd);
 	install_element(INTERFACE_NODE,
 			&ip_pim_ip_router_alert_option_check_cmd);
 	install_element(INTERFACE_NODE,
@@ -3195,6 +3302,8 @@ zebra_command_init_pimsm(ZebraPimNode *zpim, int family)
 	install_element(INTERFACE_NODE, &ipv6_pim6_cmd);
 	install_element(INTERFACE_NODE, &no_ipv6_pim6_cmd);
 	install_element(INTERFACE_NODE, &ipv6_pim6_version_cmd);
+	install_element(INTERFACE_NODE, &ipv6_pim6_passive_cmd);
+	install_element(INTERFACE_NODE, &no_ipv6_pim6_passive_cmd);
 	install_element(INTERFACE_NODE,
 			&ipv6_pim6_ip_router_alert_option_check_cmd);
 	install_element(INTERFACE_NODE,

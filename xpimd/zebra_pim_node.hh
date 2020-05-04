@@ -83,6 +83,7 @@ public:
 
     ZebraConfigVal<bool> enabled;
     ZebraConfigVal<int> proto_version;
+    ZebraConfigVal<bool> passive;
     ZebraConfigVal<bool> ip_router_alert_option_check;
     ZebraConfigVal<uint16_t> hello_triggered_delay;
     ZebraConfigVal<uint16_t> hello_period;

@@ -890,6 +890,15 @@ public:
     int		reset_vif_proto_version(const string& vif_name,
 					string& error_msg);
 
+    int		get_vif_passive(const string& vif_name,
+				bool& passive,
+				string& error_msg);
+    int		set_vif_passive(const string& vif_name,
+				bool passive,
+				string& error_msg);
+    int		reset_vif_passive(const string& vif_name,
+				  string& error_msg);
+
     /**
      * Get the value of the flag that enables/disables the IP Router Alert
      * option check per interface for received packets.

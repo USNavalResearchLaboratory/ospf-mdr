@@ -162,6 +162,18 @@ Disable PIM for an interface.
 Set the protocol version.  The default version 2.
 @end deffn
 
+@deffn  {Interface Command} {ip pim passive} {}
+@deffnx {Interface Command} {ipv6 pim6 passive} {}
+Configure the PIM interface to be passive.  A passive PIM interface
+does not send or receive PIM control packets.
+@end deffn
+
+@deffn  {Interface Command} {no ip pim passive} {}
+@deffnx {Interface Command} {no ipv6 pim6 passive} {}
+Configure the PIM interface to not be passive; this enables sending
+and receiving PIM control packets.
+@end deffn
+
 @deffn  {Interface Command} {ip pim ip-router-alert-option-check} {}
 @deffnx {Interface Command} {ipv6 pim6 ip-router-alert-option-check} {}
 Enable IP router alert option checking.  IP router alert option

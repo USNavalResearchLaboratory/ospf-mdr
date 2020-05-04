@@ -69,6 +69,7 @@ PimVif::PimVif(PimNode& pim_node, const Vif& vif)
       _dr_addr(pim_node.family()),
       _pim_nbr_me(*this, IPvX::ZERO(pim_node.family()), PIM_VERSION_DEFAULT),
       _domain_wide_addr(IPvX::ZERO(pim_node.family())),
+      _passive(false),
       _ip_router_alert_option_check(false),
       _hello_triggered_delay(PIM_HELLO_HELLO_TRIGGERED_DELAY_DEFAULT),
       _hello_period(PIM_HELLO_HELLO_PERIOD_DEFAULT,
@@ -323,7 +324,8 @@ PimVif::start(string& error_msg)
 	    return (XORP_ERROR);
 	}
 	
-	pim_hello_start();
+	if (!_passive.get())
+	    pim_hello_start();
 	
 	//
 	// Add MLD6/IGMP membership tracking
@@ -544,6 +546,14 @@ PimVif::pim_send(const IPvX& src, const IPvX& dst,
     // messages don't include the IP Router Alert option.
     //
     bool is_router_alert = false;
+
+    if (_passive.get()) {
+	XLOG_ERROR("Attempting to send %s from %s to %s on passive vif %s",
+		   PIMTYPE2ASCII(message_type),
+		   cstring(src), cstring(dst),
+		   name().c_str());
+	return (XORP_ERROR);
+    }
 
     if (! (is_up() || is_pending_down()))
 	return (XORP_ERROR);
@@ -807,6 +817,9 @@ PimVif::pim_recv(const IPvX& src,
 {
     int ret_value = XORP_ERROR;
     
+    if (_passive.get())
+	return (XORP_OK);
+
     if (! is_up()) {
 	++_pimstat_rx_interface_disabled_messages;
 	return (XORP_ERROR);
@@ -1580,6 +1593,24 @@ PimVif::update_primary_and_domain_wide_address(string& error_msg)
 	pim_dr_elect();
 
     return (XORP_OK);
+}
+
+void
+PimVif::pim_passive()
+{
+    _dr_addr = IPvX::ZERO(family());
+    _hello_timer.unschedule();
+    _hello_once_timer.unschedule();
+
+    // Remove all PIM neighbor entries
+    while (! _pim_nbrs.empty()) {
+	PimNbr *pim_nbr = _pim_nbrs.front();
+	_pim_nbrs.pop_front();
+	// TODO: perform the appropriate actions
+	delete_pim_nbr(pim_nbr);
+    }
+
+    pim_dr_elect();
 }
 
 /**
