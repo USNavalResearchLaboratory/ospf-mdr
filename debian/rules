@@ -134,7 +134,7 @@ binary-indep: build install
 
 	dh_installchangelogs -i
 	dh_installdebconf -i
-	dh_installdocs -i
+	dh_installdocs -i -X.gitignore
 	dh_installexamples -i
 	dh_installinfo -i
 	dh_installman -i
@@ -158,7 +158,7 @@ binary-arch: build install
 
 	dh_installchangelogs -a ChangeLog
 	dh_installdebconf -a
-	dh_installdocs -a
+	dh_installdocs -a -X.gitignore
 	dh_installexamples -a
 	dh_installinit -a
 	dh_installpam -a
