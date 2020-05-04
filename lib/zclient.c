@@ -1018,6 +1018,10 @@ zclient_read (struct thread *thread)
       if (zclient->linkmetrics)
         (*zclient->linkmetrics) (command, zclient, length);
       break;
+    case ZEBRA_LINKMETRICS_METRICS_REQUEST:
+      if (zclient->linkmetrics_request)
+        (*zclient->linkmetrics_request) (command, zclient, length);
+      break;
     case ZEBRA_LINKMETRICS_STATUS:
       if (zclient->linkstatus)
         (*zclient->linkstatus) (command, zclient, length);

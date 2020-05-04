@@ -86,6 +86,7 @@ struct zclient
   u_char linkmetrics_subscribe;
   /* link metrics callback functions */
   int (*linkmetrics) (int, struct zclient *, uint16_t);
+  int (*linkmetrics_request) (int, struct zclient *, uint16_t);
   int (*linkstatus) (int, struct zclient *, uint16_t);
 };
 
