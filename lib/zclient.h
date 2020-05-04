@@ -37,6 +37,8 @@
 /* Structure for the zebra client. */
 struct zclient
 {
+  void *data;
+
   /* Socket to zebra daemon. */
   int sock;
 
