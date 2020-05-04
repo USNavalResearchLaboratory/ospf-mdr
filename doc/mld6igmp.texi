@@ -83,6 +83,20 @@ value is 10 seconds.
 Set the robustness variable count.  The default value is 2.
 @end deffn
 
+@deffn  {Interface Command} {ip igmp alternative-subnet} A.B.C.D/M
+@deffnx {Interface Command} {ipv6 mld6 alternative-subnet} X:X::X:X/M
+Associate the given subnet with an interface.  Traffic from any
+additional subnets associated with an interface is treated as if
+coming from a local subnet.
+@end deffn
+
+@deffn  {Interface Command} {no ip igmp alternative-subnet} [A.B.C.D/M]
+@deffnx {Interface Command} {no ipv6 mld6 alternative-subnet} [X:X::X:X/M]
+Remove an additional subnet association from an interface.  The
+optional argument specifies the subnet to remove from an interface
+(all additional subnets if omitted).
+@end deffn
+
 @subsubsection MLD/IGMP Debug Commands
 
 @deffn  {Command} {debug igmp} {}
@@ -146,6 +160,7 @@ interface eth0
   ip igmp last-member-query-interval 1
   ip igmp query-max-response-time 10
   ip igmp robust-count 2
+  ip igmp alternative-subnet 10.62.1.0/24
 !
 router igmp
 @end example
@@ -169,6 +184,7 @@ interface eth0
   ipv6 mld6 last-member-query-interval 1
   ipv6 mld6 query-max-response-time 10
   ipv6 mld6 robust-count 2
+  ipv6 mld6 alternative-subnet 2001:8::/64
 !
 router mld6
 @end example

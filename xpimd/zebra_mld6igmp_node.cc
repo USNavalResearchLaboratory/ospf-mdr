@@ -31,6 +31,14 @@ ZebraMld6igmpVifConfig::clear_all_applied() const
     query_last_member_interval.clear_applied();
     query_response_interval.clear_applied();
     robust_count.clear_applied();
+
+    for (set<ZebraConfigVal<IPvXNet> >::const_iterator it =
+	     alternative_subnets.begin();
+	 it != alternative_subnets.end(); ++it)
+    {
+	const ZebraConfigVal<IPvXNet> &altsubnet = *it;
+	altsubnet.clear_applied();
+    }
 }
 
 ZebraMld6igmpNode::ZebraMld6igmpNode(int family, xorp_module_id module_id,
@@ -470,6 +478,22 @@ ZebraMld6igmpNode::apply_config(const string &vif_name)
 		 query_last_member_interval);
     APPLY_CONFIG(set_vif_query_response_interval, query_response_interval);
     APPLY_CONFIG(set_vif_robust_count, robust_count);
+
+    for (set<ZebraConfigVal<IPvXNet> >::const_iterator it =
+	     config.alternative_subnets.begin();
+	 it != config.alternative_subnets.end(); ++it)
+    {
+	const ZebraConfigVal<IPvXNet> &altsubnet = *it;
+	if (!altsubnet.is_applied())
+	{
+	    if (add_alternative_subnet(vif_name, altsubnet.get(),
+				       error_msg) != XORP_OK)
+		XLOG_WARNING("add_alternative_subnet() failed: %s",
+			     error_msg.c_str());
+	    else
+		altsubnet.set_applied();
+	}
+    }
 
 #undef APPLY_CONFIG
 

@@ -170,6 +170,16 @@ ZebraMld6igmpNode::zebra_config_write_interface(struct vty *vty)
 		zebra_ipstr(), zebra_protostr(),
 		vif->configured_robust_count().get(), VNL);
 
+	for (list<IPvXNet>::const_iterator it =
+		 vif->alternative_subnet_list().begin();
+	     it != vif->alternative_subnet_list().end(); ++it)
+	{
+	    const IPvXNet& ipvxnet = *it;
+	    vty_out(vty, " %s %s alternative-subnet %s%s",
+		    zebra_ipstr(), zebra_protostr(),
+		    ipvxnet.str().c_str(), VNL);
+	}
+
 	vty_out(vty, "!%s", VNL);
     }
 
@@ -573,6 +583,148 @@ ALIAS(ip_igmp_robust_count,
 
 #endif	// HAVE_IPV6_MULTICAST
 
+static int
+zmld6igmp_ip_igmp_alternative_subnet(ZebraMld6igmpNode *zmld6igmp,
+				     struct vty *vty,
+				     int argc, const char *argv[])
+{
+    XLOG_ASSERT(zmld6igmp != NULL);
+
+    struct interface *ifp = (struct interface *)vty->index;
+    XLOG_ASSERT(ifp != NULL);
+
+    IPvXNet ipvxnet(argv[0]);
+
+    pair<set<ZebraConfigVal<IPvXNet> >::const_iterator, bool> ret =
+	zmld6igmp->get_if_config(ifp->name).alternative_subnets.insert(ZebraConfigVal<IPvXNet>(ipvxnet));
+    if (ret.second == false)
+	vty_out(vty, "alternative subnet %s already exists for interface %s%s",
+		ipvxnet.str().c_str(), ifp->name,  VNL);
+
+    // try now if the interface exists
+    if (zmld6igmp->vif_find_by_name(ifp->name) != NULL)
+    {
+	string error_msg;
+	if (zmld6igmp->add_alternative_subnet(ifp->name, ipvxnet,
+					  error_msg) != XORP_OK)
+	{
+	    vty_out(vty, "couldn't add alternative subnet %s for interface %s: %s%s",
+		    ipvxnet.str().c_str(), ifp->name, error_msg.c_str(), VNL);
+	    return CMD_WARNING;
+	}
+    }
+
+    return CMD_SUCCESS;
+}
+
+static int
+zmld6igmp_no_ip_igmp_alternative_subnet(ZebraMld6igmpNode *zmld6igmp,
+					struct vty *vty,
+					int argc, const char *argv[])
+{
+    XLOG_ASSERT(zmld6igmp != NULL);
+
+    struct interface *ifp = (struct interface *)vty->index;
+    XLOG_ASSERT(ifp != NULL);
+
+    switch (argc)
+    {
+    case 0:
+	zmld6igmp->get_if_config(ifp->name).alternative_subnets.clear();
+
+	// try now if the interface exists
+	if (zmld6igmp->vif_find_by_name(ifp->name) != NULL)
+	{
+	    string error_msg;
+	    if (zmld6igmp->remove_all_alternative_subnets(ifp->name,
+						      error_msg) != XORP_OK)
+	    {
+		vty_out(vty, "couldn't remove all alternative subnets for interface %s: %s%s",
+			ifp->name, error_msg.c_str(), VNL);
+		return CMD_WARNING;
+	    }
+	}
+	break;
+
+    case 1:
+	{
+	    IPvXNet ipvxnet(argv[0]);
+	    if (zmld6igmp->get_if_config(ifp->name).alternative_subnets.erase(ZebraConfigVal<IPvXNet>(ipvxnet)) == 0)
+		vty_out(vty, "alternative subnet %s does not exist for interface %s%s",
+			ipvxnet.str().c_str(), ifp->name,  VNL);
+
+	    // try now if the interface exists
+	    if (zmld6igmp->vif_find_by_name(ifp->name) != NULL)
+	    {
+		string error_msg;
+		if (zmld6igmp->delete_alternative_subnet(ifp->name, ipvxnet,
+						     error_msg) != XORP_OK)
+		{
+		    vty_out(vty, "couldn't remove alternative subnet %s for interface %s: %s%s",
+			    ipvxnet.str().c_str(), ifp->name, error_msg.c_str(), VNL);
+		    return CMD_WARNING;
+		}
+	    }
+	}
+	break;
+
+    default:
+	return CMD_ERR_NO_MATCH;
+    }
+
+    return CMD_SUCCESS;
+}
+
+DEFUN(ip_igmp_alternative_subnet,
+      ip_igmp_alternative_subnet_cmd,
+      "ip igmp alternative-subnet A.B.C.D/M",
+      IP_STR
+      ZMLD6IGMP_STR
+      "Associate an additional subnet with this network interface\n"
+      "Subnet address/prefix length\n")
+{
+    ZebraMld6igmpNode *zmld6igmp = _zmld6igmp;
+    XLOG_ASSERT(zmld6igmp != NULL);
+
+    return zmld6igmp_ip_igmp_alternative_subnet(zmld6igmp, vty, argc, argv);
+}
+
+DEFUN(no_ip_igmp_alternative_subnet,
+      no_ip_igmp_alternative_subnet_cmd,
+      "no ip igmp alternative-subnet [A.B.C.D/M]",
+      NO_STR
+      IP_STR
+      ZMLD6IGMP_STR
+      "Remove additional subnet association from this network interface\n"
+      "Optional Subnet address/prefix length (all additional subnets if omitted)\n")
+{
+    ZebraMld6igmpNode *zmld6igmp = _zmld6igmp;
+    XLOG_ASSERT(zmld6igmp != NULL);
+
+    return zmld6igmp_no_ip_igmp_alternative_subnet(zmld6igmp, vty, argc, argv);
+}
+
+#ifdef HAVE_IPV6_MULTICAST
+
+ALIAS(ip_igmp_alternative_subnet,
+      ipv6_mld6_alternative_subnet_cmd,
+      "ipv6 mld6 alternative-subnet X:X::X:X/M",
+      IP6_STR
+      ZMLD6IGMP6_STR
+      "Associate an additional subnet with this network interface\n"
+      "Subnet address/prefix length\n");
+
+ALIAS(no_ip_igmp_alternative_subnet,
+      no_ipv6_mld6_alternative_subnet_cmd,
+      "no ipv6 mld6 alternative-subnet [X:X::X:X/M]",
+      NO_STR
+      IP6_STR
+      ZMLD6IGMP6_STR
+      "Remove additional subnet association from this network interface\n"
+      "Optional Subnet address/prefix length (all additional subnets if omitted)\n");
+
+#endif	// HAVE_IPV6_MULTICAST
+
 // zmld6igmp debug configuration write
 int
 ZebraMld6igmpNode::zebra_config_write_debug(struct vty *vty)
@@ -820,6 +972,8 @@ ZebraMld6igmpNode::zebra_command_init()
 	install_element(INTERFACE_NODE,
 			&ip_igmp_query_max_response_time_cmd);
 	install_element(INTERFACE_NODE, &ip_igmp_robust_count_cmd);
+	install_element(INTERFACE_NODE, &ip_igmp_alternative_subnet_cmd);
+	install_element(INTERFACE_NODE, &no_ip_igmp_alternative_subnet_cmd);
     }
 #ifdef HAVE_IPV6_MULTICAST
     else if (Mld6igmpNode::family() == AF_INET6)
@@ -839,6 +993,8 @@ ZebraMld6igmpNode::zebra_command_init()
 	install_element(INTERFACE_NODE,
 			&ipv6_mld6_query_max_response_time_cmd);
 	install_element(INTERFACE_NODE, &ipv6_mld6_robust_count_cmd);
+	install_element(INTERFACE_NODE, &ipv6_mld6_alternative_subnet_cmd);
+	install_element(INTERFACE_NODE, &no_ipv6_mld6_alternative_subnet_cmd);
     }
 #endif	// HAVE_IPV6_MULTICAST
     else

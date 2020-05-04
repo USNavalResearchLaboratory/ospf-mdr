@@ -788,6 +788,15 @@ public:
     int		reset_vif_robust_count(const string& vif_name,
 				       string& error_msg);
     
+    int		add_alternative_subnet(const string& vif_name,
+				       const IPvXNet& subnet,
+				       string& error_msg);
+    int		delete_alternative_subnet(const string& vif_name,
+					  const IPvXNet& subnet,
+					  string& error_msg);
+    int		remove_all_alternative_subnets(const string& vif_name,
+					       string& error_msg);
+
     //
     // Debug-related methods
     //

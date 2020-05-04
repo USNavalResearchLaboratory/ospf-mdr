@@ -1651,6 +1651,43 @@ Mld6igmpVif::is_mldv2_mode(const Mld6igmpGroupRecord* group_record) const
     return (is_mldv2_mode());
 }
 
+void
+Mld6igmpVif::add_alternative_subnet(const IPvXNet& subnet)
+{
+    list<IPvXNet>::iterator iter;
+
+    iter = find(_alternative_subnet_list.begin(),
+		_alternative_subnet_list.end(),
+		subnet);
+    if (iter != _alternative_subnet_list.end())
+	return;		// Already added
+
+    _alternative_subnet_list.push_back(subnet);
+}
+
+void
+Mld6igmpVif::delete_alternative_subnet(const IPvXNet& subnet)
+{
+    list<IPvXNet>::iterator iter;
+
+    iter = find(_alternative_subnet_list.begin(),
+		_alternative_subnet_list.end(),
+		subnet);
+    if (iter == _alternative_subnet_list.end())
+	return;		// No such subnet
+
+    _alternative_subnet_list.erase(iter);
+}
+
+void
+Mld6igmpVif::remove_all_alternative_subnets()
+{
+    if (_alternative_subnet_list.empty())
+	return;		// No alternative subnets to remove
+
+    _alternative_subnet_list.clear();
+}
+
 /**
  * Return the ASCII text description of the protocol message.
  *

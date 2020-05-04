@@ -1188,7 +1188,6 @@ Mld6igmpNode::is_directly_connected(const Mld6igmpVif& mld6igmp_vif,
     if (! mld6igmp_vif.is_up())
 	return (false);
 
-#if 0	// TODO: not implemented yet
     //
     // Test the alternative subnets
     //
@@ -1200,7 +1199,6 @@ Mld6igmpNode::is_directly_connected(const Mld6igmpVif& mld6igmp_vif,
 	if (ipvxnet.contains(ipaddr_test))
 	    return true;
     }
-#endif
 
     //
     // Test the same subnet addresses, or the P2P addresses

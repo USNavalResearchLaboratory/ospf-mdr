@@ -7,6 +7,7 @@
 
 #include <map>
 #include <string>
+#include <set>
 
 #include "mld6igmp/mld6igmp_node.hh"
 #include "mld6igmp/mld6igmp_node_cli.hh"
@@ -30,6 +31,7 @@ public:
     ZebraConfigVal<TimeVal> query_last_member_interval;
     ZebraConfigVal<TimeVal> query_response_interval;
     ZebraConfigVal<uint32_t> robust_count;
+    set<ZebraConfigVal<IPvXNet> > alternative_subnets;
 };
 
 class ZebraMld6igmpClient;

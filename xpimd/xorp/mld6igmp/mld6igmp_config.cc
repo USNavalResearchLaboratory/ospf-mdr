@@ -580,3 +580,79 @@ Mld6igmpNode::reset_vif_robust_count(const string& vif_name,
     
     return (XORP_OK);
 }
+
+//
+// Add an alternative subnet on a vif.
+//
+// An alternative subnet is used to make incoming traffic with a non-local
+// source address appear as it is coming from a local subnet.
+// Note: add alternative subnets with extreme care, only if you know what
+// you are really doing!
+//
+// Return: %XORP_OK on success, otherwise %XORP_ERROR.
+//
+int
+Mld6igmpNode::add_alternative_subnet(const string& vif_name,
+				     const IPvXNet& subnet,
+				     string& error_msg)
+{
+    Mld6igmpVif *mld6igmp_vif = vif_find_by_name(vif_name);
+
+    if (mld6igmp_vif == NULL) {
+	error_msg = c_format("Cannot add alternative subnet to vif %s: "
+			     "no such vif",
+			     vif_name.c_str());
+	return (XORP_ERROR);
+    }
+
+    mld6igmp_vif->add_alternative_subnet(subnet);
+
+    return (XORP_OK);
+}
+
+//
+// Delete an alternative subnet on a vif.
+//
+// Return: %XORP_OK on success, otherwise %XORP_ERROR.
+//
+int
+Mld6igmpNode::delete_alternative_subnet(const string& vif_name,
+					const IPvXNet& subnet,
+					string& error_msg)
+{
+    Mld6igmpVif *mld6igmp_vif = vif_find_by_name(vif_name);
+
+    if (mld6igmp_vif == NULL) {
+	error_msg = c_format("Cannot delete alternative subnet from vif %s: "
+			     "no such vif",
+			     vif_name.c_str());
+	return (XORP_ERROR);
+    }
+
+    mld6igmp_vif->delete_alternative_subnet(subnet);
+
+    return (XORP_OK);
+}
+
+//
+// Remove all alternative subnets on a vif.
+//
+// Return: %XORP_OK on success, otherwise %XORP_ERROR.
+//
+int
+Mld6igmpNode::remove_all_alternative_subnets(const string& vif_name,
+					     string& error_msg)
+{
+    Mld6igmpVif *mld6igmp_vif = vif_find_by_name(vif_name);
+
+    if (mld6igmp_vif == NULL) {
+	error_msg = c_format("Cannot remove all alternative subnets from vif %s: "
+			     "no such vif",
+			     vif_name.c_str());
+	return (XORP_ERROR);
+    }
+
+    mld6igmp_vif->remove_all_alternative_subnets();
+
+    return (XORP_OK);
+}

@@ -551,6 +551,12 @@ public:
      */
     bool	is_mldv2_mode(const Mld6igmpGroupRecord* group_record) const;
 
+    // Misc. functions
+    const list<IPvXNet>& alternative_subnet_list() const { return _alternative_subnet_list; }
+    void add_alternative_subnet(const IPvXNet& subnet);
+    void delete_alternative_subnet(const IPvXNet& subnet);
+    void remove_all_alternative_subnets();
+
 private:
     //
     // Private functions
@@ -632,6 +638,10 @@ private:
     uint8_t	_startup_query_count;	// Number of queries to send quickly
 					// during startup
     Mld6igmpGroupSet _group_records;	// The group records
+
+    // The alternative subnets on a vif. Used to make incoming traffic with a
+    // non-local source address to appear as it is coming from a local subnet.
+    list<IPvXNet> _alternative_subnet_list;
 
     //
     // Misc configuration parameters
