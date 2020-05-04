@@ -279,11 +279,14 @@ zprivs_caps_init (struct zebra_privs_t *zprivs)
       exit (1);
     }
   
-  /* set permitted caps */
-  cap_set_flag(zprivs_state.caps, CAP_PERMITTED, 
-               zprivs_state.syscaps_p->num,
-               zprivs_state.syscaps_p->caps,
-               CAP_SET);
+  /* set permitted caps, if any */
+  if (zprivs_state.syscaps_p && zprivs_state.syscaps_p->num)
+    {
+      cap_set_flag(zprivs_state.caps, CAP_PERMITTED,
+                   zprivs_state.syscaps_p->num,
+                   zprivs_state.syscaps_p->caps,
+                   CAP_SET);
+    }
     
   /* set inheritable caps, if any */
   if (zprivs_state.syscaps_i && zprivs_state.syscaps_i->num)
