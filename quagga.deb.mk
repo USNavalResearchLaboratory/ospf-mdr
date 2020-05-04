@@ -11,7 +11,7 @@ ifneq ($(strip $(shell git rev-parse --git-dir 2> /dev/null)),)
 COMMITDATE	:= .$(shell date -u -d \
 	@$(shell git log -1 --format='%ct') +%Y%m%d.%H%M%S)
 COMMITHASH	:= $(shell git log -1 --format='%h')
-DIRTY		:= $(shell git diff-index --quiet HEAD || echo .dirty)
+DIRTY		:= $(shell git diff --quiet HEAD || echo .dirty)
 COMMIT		:= .g$(COMMITHASH)$(DIRTY)
 else
 ifneq ($(strip $(shell svn info --show-item kind 2> /dev/null)),)
