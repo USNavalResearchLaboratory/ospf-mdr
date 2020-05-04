@@ -22,6 +22,7 @@ PROG="zebra"
 cmd=zebra
 LOCK_FILE=/var/lock/subsys/zebra
 CONF_FILE=/etc/quagga/zebra.conf
+RUNTIME_DIR=/var/run/quagga
 
 case "$1" in
   start)
@@ -36,6 +37,9 @@ case "$1" in
 	fi
 
 	echo -n $"Starting $PROG: "
+	mkdir -p $RUNTIME_DIR
+	chown -R quagga:quagga $RUNTIME_DIR
+	chmod 0755 $RUNTIME_DIR
 	/sbin/ip route flush proto zebra
 	daemon $cmd -d $ZEBRA_OPTS -f $CONF_FILE
 	RETVAL=$?

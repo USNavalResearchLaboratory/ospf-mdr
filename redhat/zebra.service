@@ -6,6 +6,9 @@ ConditionPathExists=/etc/quagga/zebra.conf
 [Service]
 Type=forking
 EnvironmentFile=-/etc/sysconfig/quagga
+ExecStartPre=/usr/bin/mkdir -p /var/run/quagga
+ExecStartPre=/usr/bin/chown -R quagga:quagga /var/run/quagga
+ExecStartPre=/usr/bin/chmod 0755 /var/run/quagga
 ExecStartPre=/sbin/ip route flush proto zebra
 ExecStart=/usr/sbin/zebra -d $ZEBRA_OPTS -f /etc/quagga/zebra.conf
 Restart=on-abort
