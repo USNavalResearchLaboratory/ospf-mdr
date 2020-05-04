@@ -13,7 +13,7 @@ EXTRA_DIST = aclocal.m4 SERVICES TODO REPORTING-BUGS INSTALL.quagga.txt \
 	vtysh/Makefile.in vtysh/Makefile.am \
 	tools/mrlg.cgi tools/rrcheck.pl tools/rrlookup.pl tools/zc.pl \
 	tools/zebra.el tools/multiple-bgpd.sh \
-	RELEASE_NOTES.MobileRouting quagga.deb.mk
+	RELEASE_NOTES.MobileRouting quagga.deb.mk quagga.rpm.mk
 
 if POST_INSTALL_LDCONFIG
 install-exec-local:
