@@ -21,87 +21,87 @@ The following commands are used to configure MLD/IGMP.
 @subsubsection MLD/IGMP Router Commands
 
 @deffn  {Command} {router igmp} {}
-@deffnx {Command} {router mld} {}
+@deffnx {Command} {router mld6} {}
 Enable IGMP/MLD.
 @end deffn
 
 @deffn  {Command} {no router igmp} {}
-@deffnx {Command} {no router mld} {}
+@deffnx {Command} {no router mld6} {}
 Disable IGMP/MLD.
 @end deffn
 
 @subsubsection MLD/IGMP Interface Commands
 
 @deffn  {Interface Command} {ip igmp} {}
-@deffnx {Interface Command} {ipv6 mld} {}
+@deffnx {Interface Command} {ipv6 mld6} {}
 Enable IGMP/MLD for an interface.
 @end deffn
 
 @deffn  {Interface Command} {no ip igmp} {}
-@deffnx {Interface Command} {no ipv6 mld} {}
+@deffnx {Interface Command} {no ipv6 mld6} {}
 Disable IGMP/MLD for an interface.
 @end deffn
 
 @deffn  {Interface Command} {ip igmp version} {1--3}
-@deffnx {Interface Command} {ipv6 mld version} {1--2}
+@deffnx {Interface Command} {ipv6 mld6 version} {1--2}
 Set the protocol version.  The default version for IGMP is 2; the
 default for MLD is version 1.
 @end deffn
 
 @deffn  {Interface Command} {ip igmp ip-router-alert-option-check} {}
-@deffnx {Interface Command} {ipv6 mld ip-router-alert-option-check} {}
+@deffnx {Interface Command} {ipv6 mld6 ip-router-alert-option-check} {}
 Enable IP router alert option checking.  IP router alert option
 checking is disabled by default.
 @end deffn
 
 @deffn  {Interface Command} {no ip igmp ip-router-alert-option-check} {}
-@deffnx {Interface Command} {no ipv6 mld ip-router-alert-option-check} {}
+@deffnx {Interface Command} {no ipv6 mld6 ip-router-alert-option-check} {}
 Disable IP router alert option checking.  IP router alert option
 checking is disabled by default.
 @end deffn
 
 @deffn  {Interface Command} {ip igmp query-interval} {1--1024}
-@deffnx {Interface Command} {ipv6 mld query-interval} {1--1024}
+@deffnx {Interface Command} {ipv6 mld6 query-interval} {1--1024}
 Set the IGMP/MLD query interval (in seconds).  The default query
 interval is 125 seconds.
 @end deffn
 
 @deffn  {Interface Command} {ip igmp last-member-query-interval} {1--1024}
-@deffnx {Interface Command} {ipv6 mld last-member-query-interval} {1--1024}
+@deffnx {Interface Command} {ipv6 mld6 last-member-query-interval} {1--1024}
 Set the last-member query interval (in seconds).  The default value is
 1 second.
 @end deffn
 
 @deffn  {Interface Command} {ip igmp query-max-response-time} {1--1024}
-@deffnx {Interface Command} {ipv6 mld query-max-response-time} {1--1024}
+@deffnx {Interface Command} {ipv6 mld6 query-max-response-time} {1--1024}
 Set the maximum query response interval (in seconds).  The default
 value is 10 seconds.
 @end deffn
 
 @deffn  {Interface Command} {ip igmp robust-count} {2--10}
-@deffnx {Interface Command} {ipv6 mld robust-count} {2--10}
+@deffnx {Interface Command} {ipv6 mld6 robust-count} {2--10}
 Set the robustness variable count.  The default value is 2.
 @end deffn
 
 @subsubsection MLD/IGMP Debug Commands
 
 @deffn  {Command} {debug igmp} {}
-@deffnx {Command} {debug mld} {}
+@deffnx {Command} {debug mld6} {}
 Enable IGMP/MLD debugging.
 @end deffn
 
 @deffn  {Command} {no debug igmp} {}
-@deffnx {Command} {no debug mld} {}
+@deffnx {Command} {no debug mld6} {}
 Disable IGMP/MLD debugging.
 @end deffn
 
 @deffn  {Command} {debug igmp trace} {}
-@deffnx {Command} {debug mld trace} {}
+@deffnx {Command} {debug mld6 trace} {}
 Enable trace-level IGMP/MLD debugging.
 @end deffn
 
 @deffn  {Command} {no debug igmp trace} {}
-@deffnx {Command} {no debug mld} {}
+@deffnx {Command} {no debug mld6} {}
 Disable trace-level IGMP/MLD debugging.
 @end deffn
 
@@ -114,19 +114,19 @@ The following commands provide information about MLD/IGMP.
 @subsubsection MLD/IGMP Information Commands
 
 @deffn  {Command} {show ip igmp group} [A.B.C.D @dots{}]
-@deffnx {Command} {show ipv6 mld group} [X:X::X:X @dots{}]
+@deffnx {Command} {show ipv6 mld6 group} [X:X::X:X @dots{}]
 Display information about MLD/IGMP group membership for the given
 multicast group(s) (all groups if omitted).
 @end deffn
 
 @deffn  {Command} {show ip igmp interface} [IFNAME]
-@deffnx {Command} {show ipv6 mld interface} [IFNAME]
+@deffnx {Command} {show ipv6 mld6 interface} [IFNAME]
 Display MLD/IGMP information about interface @var{IFNAME} (all
 interfaces if omitted).
 @end deffn
 
 @deffn  {Command} {show ip igmp interface-address} [IFNAME]
-@deffnx {Command} {show ipv6 mld interface-address} [IFNAME]
+@deffnx {Command} {show ipv6 mld6 interface-address} [IFNAME]
 Display address information about MLD/IGMP interface @var{IFNAME} (all
 interfaces if omitted).
 @end deffn
