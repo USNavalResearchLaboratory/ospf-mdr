@@ -1215,12 +1215,11 @@ ZebraPimNode::delete_protocol_mld6igmp(uint32_t vif_index)
 void
 ZebraPimNode::apply_config(const string &vif_name)
 {
-    if (_if_config.count(vif_name) == 0)
-	return;
-
-    ZebraPimVifConfig &config = _if_config[vif_name];
-
     string error_msg;
+
+    if (_if_config.count(vif_name))
+    {
+	ZebraPimVifConfig &config = _if_config[vif_name];
 
 #define APPLY_CONFIG(func, configparam)					\
     do {								\
@@ -1233,70 +1232,71 @@ ZebraPimNode::apply_config(const string &vif_name)
 	}								\
     } while (0)
 
-    APPLY_CONFIG(set_vif_proto_version, proto_version);
-    APPLY_CONFIG(set_vif_passive, passive);
-    APPLY_CONFIG(set_vif_ip_router_alert_option_check,
-		 ip_router_alert_option_check);
-    APPLY_CONFIG(set_vif_hello_triggered_delay, hello_triggered_delay);
-    APPLY_CONFIG(set_vif_hello_period, hello_period);
-    APPLY_CONFIG(set_vif_hello_holdtime, hello_holdtime);
-    APPLY_CONFIG(set_vif_dr_priority, dr_priority);
-    APPLY_CONFIG(set_vif_propagation_delay, propagation_delay);
-    APPLY_CONFIG(set_vif_override_interval, override_interval);
-    APPLY_CONFIG(set_vif_is_tracking_support_disabled,
-		 is_tracking_support_disabled);
-    APPLY_CONFIG(set_vif_accept_nohello_neighbors, accept_nohello_neighbors);
-    APPLY_CONFIG(set_vif_join_prune_period, join_prune_period);
+	APPLY_CONFIG(set_vif_proto_version, proto_version);
+	APPLY_CONFIG(set_vif_passive, passive);
+	APPLY_CONFIG(set_vif_ip_router_alert_option_check,
+		     ip_router_alert_option_check);
+	APPLY_CONFIG(set_vif_hello_triggered_delay, hello_triggered_delay);
+	APPLY_CONFIG(set_vif_hello_period, hello_period);
+	APPLY_CONFIG(set_vif_hello_holdtime, hello_holdtime);
+	APPLY_CONFIG(set_vif_dr_priority, dr_priority);
+	APPLY_CONFIG(set_vif_propagation_delay, propagation_delay);
+	APPLY_CONFIG(set_vif_override_interval, override_interval);
+	APPLY_CONFIG(set_vif_is_tracking_support_disabled,
+		     is_tracking_support_disabled);
+	APPLY_CONFIG(set_vif_accept_nohello_neighbors, accept_nohello_neighbors);
+	APPLY_CONFIG(set_vif_join_prune_period, join_prune_period);
 
-    for (set<ZebraConfigVal<IPvXNet> >::const_iterator it =
-	     config.alternative_subnets.begin();
-	 it != config.alternative_subnets.end(); ++it)
-    {
-	const ZebraConfigVal<IPvXNet> &altsubnet = *it;
-	if (!altsubnet.is_applied())
+	for (set<ZebraConfigVal<IPvXNet> >::const_iterator it =
+		 config.alternative_subnets.begin();
+	     it != config.alternative_subnets.end(); ++it)
 	{
-	    if (add_alternative_subnet(vif_name, altsubnet.get(),
-				       error_msg) != XORP_OK)
-		XLOG_WARNING("add_alternative_subnet() failed: %s",
-			     error_msg.c_str());
-	    else
-		altsubnet.set_applied();
+	    const ZebraConfigVal<IPvXNet> &altsubnet = *it;
+	    if (!altsubnet.is_applied())
+	    {
+		if (add_alternative_subnet(vif_name, altsubnet.get(),
+					   error_msg) != XORP_OK)
+		    XLOG_WARNING("add_alternative_subnet() failed: %s",
+				 error_msg.c_str());
+		else
+		    altsubnet.set_applied();
+	    }
 	}
-    }
 
-    for (set<ZebraConfigVal<ZebraStaticMembership> >::const_iterator it =
-	     config.static_memberships.begin();
-	 it != config.static_memberships.end(); ++it)
-    {
-	const ZebraConfigVal<ZebraStaticMembership> &staticmbr = *it;
-	if (!staticmbr.is_applied())
+	for (set<ZebraConfigVal<ZebraStaticMembership> >::const_iterator it =
+		 config.static_memberships.begin();
+	     it != config.static_memberships.end(); ++it)
 	{
-	    if (add_static_membership(vif_name, staticmbr.get().source(),
-				      staticmbr.get().group(),
-				      error_msg) != XORP_OK)
-		XLOG_WARNING("add_static_membership() failed: %s",
-			     error_msg.c_str());
-	    else
-		staticmbr.set_applied();
+	    const ZebraConfigVal<ZebraStaticMembership> &staticmbr = *it;
+	    if (!staticmbr.is_applied())
+	    {
+		if (add_static_membership(vif_name, staticmbr.get().source(),
+					  staticmbr.get().group(),
+					  error_msg) != XORP_OK)
+		    XLOG_WARNING("add_static_membership() failed: %s",
+				 error_msg.c_str());
+		else
+		    staticmbr.set_applied();
+	    }
 	}
-    }
 
 #undef APPLY_CONFIG
 
-    if (!config.enabled.is_applied())
-    {
-	if (config.enabled.is_set() && config.enabled.get())
+	if (!config.enabled.is_applied())
 	{
-	    if (enable_vif(vif_name, error_msg) != XORP_OK)
-		XLOG_WARNING("couldn't enable interface %s: %s",
-			     vif_name.c_str(), error_msg.c_str());
-	    else
-		config.enabled.set_applied();
+	    if (config.enabled.is_set() && config.enabled.get())
+	    {
+		if (enable_vif(vif_name, error_msg) != XORP_OK)
+		    XLOG_WARNING("couldn't enable interface %s: %s",
+				 vif_name.c_str(), error_msg.c_str());
+		else
+		    config.enabled.set_applied();
+	    }
 	}
-    }
 
-    // try to start the interface
-    try_start_vif(vif_name);
+	// try to start the interface
+	try_start_vif(vif_name);
+    }
 
     if (_pending_rp_update)
     {
