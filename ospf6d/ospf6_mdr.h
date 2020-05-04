@@ -49,6 +49,7 @@ bool ospf6_mdr_set_mdr_level (struct ospf6_neighbor *on,
 			      u_int32_t id1, u_int32_t id2);
 void ospf6_calculate_mdr (struct ospf6_interface *oi);
 int ospf6_mdr_update_lsa (struct ospf6_interface *oi);
+int ospf6_mdr_update_routable_neighbors (struct ospf6_interface *oi);
 
 /**
  * A MDR level callback

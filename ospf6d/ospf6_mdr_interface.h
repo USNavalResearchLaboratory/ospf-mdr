@@ -75,6 +75,8 @@ struct ospf6_mdr_interface
   struct list *lnl;
   u_int16_t hsn;
   u_int full_hello_count;
+
+  bool update_routable_neighbors_immediately;
 };
 
 struct ospf6_interface;

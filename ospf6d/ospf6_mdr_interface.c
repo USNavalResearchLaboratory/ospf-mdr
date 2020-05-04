@@ -54,6 +54,8 @@ ospf6_mdr_interface_create (struct ospf6_interface *oi)
   oi->mdr.lnl = list_new ();
   oi->mdr.hsn = 0;
   oi->mdr.full_hello_count = 0;
+
+  oi->mdr.update_routable_neighbors_immediately = false;
 }
 
 /* set default values for MDR interfaces from RFC 5614, Section 3.2 */
@@ -378,6 +380,39 @@ DEFUN (ipv6_ospf6_consechellothresh,
   return CMD_SUCCESS;
 }
 
+DEFUN (ipv6_ospf6_update_routable_neighbors_immediately,
+       ipv6_ospf6_update_routable_neighbors_immediately_cmd,
+       "ipv6 ospf6 update-routable-neighbors-immediately",
+       IP6_STR
+       OSPF6_STR
+       "Update the set of routable neighbors immediately after performing a SPF calculation\n")
+{
+  struct ospf6_interface *oi;
+
+  oi = ospf6_interface_vtyget (vty);
+
+  oi->mdr.update_routable_neighbors_immediately = true;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_ospf6_update_routable_neighbors_immediately,
+       no_ipv6_ospf6_update_routable_neighbors_immediately_cmd,
+       "no ipv6 ospf6 update-routable-neighbors-immediately",
+       NO_STR
+       IP6_STR
+       OSPF6_STR
+       "Update the set of routable neighbors immediately after performing a SPF calculation\n")
+{
+  struct ospf6_interface *oi;
+
+  oi = ospf6_interface_vtyget (vty);
+
+  oi->mdr.update_routable_neighbors_immediately = false;
+
+  return CMD_SUCCESS;
+}
+
 void
 ospf6_mdr_interface_config_write (struct vty *vty, struct ospf6_interface *oi)
 {
@@ -421,6 +456,11 @@ ospf6_mdr_interface_config_write (struct vty *vty, struct ospf6_interface *oi)
     case OSPF6_LSA_FULLNESS_MINCOST2PATHS:
       vty_out (vty, " ipv6 ospf6 lsafullness mincost2lsa%s", VNL);
       break;
+    }
+  if (oi->mdr.update_routable_neighbors_immediately)
+    {
+      vty_out (vty, " ipv6 ospf6 update-routable-neighbors-immediately%s",
+               VNL);
     }
 }
 
@@ -515,6 +555,10 @@ ospf6_mdr_interface_init (void)
   install_element (INTERFACE_NODE, &ipv6_ospf6_adjacencyconnectivity_cmd);
   install_element (INTERFACE_NODE, &ipv6_ospf6_lsafullness_cmd);
   install_element (INTERFACE_NODE, &ipv6_ospf6_consechellothresh_cmd);
+  install_element (INTERFACE_NODE,
+                   &ipv6_ospf6_update_routable_neighbors_immediately_cmd);
+  install_element (INTERFACE_NODE,
+                   &no_ipv6_ospf6_update_routable_neighbors_immediately_cmd);
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_mdrlevel_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_mdrlevel_cmd);

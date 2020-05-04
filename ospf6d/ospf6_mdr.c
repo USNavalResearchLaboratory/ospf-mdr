@@ -890,7 +890,7 @@ ospf6_mdr_backbone (struct ospf6_neighbor *on)
 
 // Updates the set of routable neighbors, by checking if a route
 // exists to each neighbor. Returns 1 if there is a change.
-static int
+int
 ospf6_mdr_update_routable_neighbors (struct ospf6_interface *oi)
 {
   struct listnode *j;

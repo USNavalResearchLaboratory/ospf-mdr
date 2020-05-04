@@ -43,6 +43,7 @@
 #include "ospf6_neighbor.h"
 #include "ospf6_af.h"
 #include "ospf6_proto.h"
+#include "ospf6_mdr.h"
 
 unsigned char conf_debug_ospf6_spf = 0;
 
@@ -854,6 +855,9 @@ ospf6_spf_calculation_thread (struct thread *t)
 {
   struct ospf6_area *oa;
   struct timeval start, end, runtime;
+  struct listnode *node;
+  struct ospf6_interface *oi;
+  int change;
 
   oa = (struct ospf6_area *) THREAD_ARG (t);
   oa->thread_spf_calculation = NULL;
@@ -877,6 +881,26 @@ ospf6_spf_calculation_thread (struct thread *t)
   ospf6_intra_brouter_calculation (oa);
 
   quagga_gettime (QUAGGA_CLK_MONOTONIC, &oa->last_spftime);
+
+  change = 0;
+  for (ALL_LIST_ELEMENTS_RO (oa->if_list, node, oi))
+    {
+      if (oi->type == OSPF6_IFTYPE_MDR &&
+          oi->mdr.update_routable_neighbors_immediately)
+        {
+          change = ospf6_mdr_update_routable_neighbors (oi);
+          if (change)
+            break;
+        }
+    }
+
+  // rerun spf if the set of routable neighbors has changed
+  if (change)
+    {
+      ospf6_spf_calculation (oa->ospf6->router_id, oa->spf_table, oa);
+      ospf6_intra_route_calculation (oa);
+      ospf6_intra_brouter_calculation (oa);
+    }
 
   return 0;
 }

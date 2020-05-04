@@ -504,6 +504,16 @@ forwarders.
 Default: disabled
 @end deffn
 
+@deffn {Interface Command} {ipv6 ospf6 update-routable-neighbors-immediately} {}
+@deffnx {Interface Command} {no ipv6 ospf6 update-routable-neighbors-immediately} {}
+Configure if the set of routable neighbors is updated immediately
+after the shortest-path tree and routing table are calculated.
+When enabled, and the set of routable neighbors has changed, a second
+shortest-path tree an routing table calculation is performed.
+
+Default: do not update routable neighbors immediately.
+@end deffn
+
 
 @node Showing OSPF-MANET Information
 @section Showing OSPF-MANET Information
