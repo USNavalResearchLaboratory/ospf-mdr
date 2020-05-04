@@ -12,7 +12,7 @@ clean:
 	rm -rf $(RPMBUILD)
 
 .PHONY: build
-build: dist
+build: quagga-$(VERSION).tar.gz redhat/quagga.spec
 	for d in SOURCES SPECS; do mkdir -p $(RPMBUILD)/$$d; done
 	cp -afv quagga-$(VERSION).tar.gz $(RPMBUILD)/SOURCES
 	cp -afv redhat/quagga.spec $(RPMBUILD)/SPECS
@@ -20,11 +20,10 @@ build: dist
 	    --define '_topdir $(abspath $(RPMBUILD))'
 	@printf '\nRPM packages saved in $(RPMBUILD)/RPMS\n\n'
 
-.PHONY: dist
-dist: Makefile
+quagga-$(VERSION).tar.gz: Makefile
 	$(MAKE) dist
 
-Makefile: configure
+Makefile redhat/quagga.spec: configure
 	./configure
 
 configure: bootstrap.sh

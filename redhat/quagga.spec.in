@@ -1,3 +1,5 @@
+%define srcname quagga
+
 %if "%(git rev-parse --git-dir 2> /dev/null)" != ""
 %define	commit_date	%(date -u -d @$(git log -1 --format='%%ct') +%%Y%%m%%d.%%H%%M%%S)
 %define	commit_hash	%(git log -1 --format='%%h')
@@ -43,7 +45,7 @@
 
 # path defines
 %define		_sysconfdir	/etc/quagga
-%define		zeb_src		%{_builddir}/%{name}-%{version}
+%define		zeb_src		%{_builddir}/%{srcname}-%{version}
 %define		zeb_rh_src	%{zeb_src}/redhat
 %define		zeb_docs	%{zeb_src}/doc
 
@@ -56,8 +58,6 @@
 
 ####################### distro specific tweaks #############################
 # default distro. Override with rpmbuild -D "dist XXX" 
-%{expand: %%define default_dist %(rpm -q --qf 'fc%%{VERSION}' fedora-release | grep -v 'not installed')}
-%{!?dist:		%define		dist	%{default_dist}}
 
 # as distros change packages we depend on, our Requires have to change, sadly.
 %define quagga_buildreqs texinfo tetex autoconf
@@ -111,12 +111,12 @@
 %{!?keep_build:		%define		keep_build	0 }
 
 Summary: Routing daemon
-Name:		quagga
+Name:		quagga-mr
 Version:	@VERSION@
 Release:	%{?commit_date}%{?commit}
 License:	GPL
 Group: System Environment/Daemons
-Source0:	http://downloads.pf.itd.nrl.navy.mil/ospf-manet/%{name}-%{version}.tar.gz
+Source0:	http://downloads.pf.itd.nrl.navy.mil/ospf-manet/%{srcname}-%{version}.tar.gz
 URL:		http://www.nrl.navy.mil/itd/ncs/products/ospf-manet
 %if %{with_snmp}
 BuildRequires:	net-snmp-devel
@@ -134,8 +134,9 @@ BuildRequires:	pam-devel
 Requires:	initscripts >= 5.60
 Requires:	ncurses pam
 Provides:	routingdaemon
-BuildRoot:	%{_tmppath}/%{name}-%{version}-root
-Obsoletes:	bird gated mrt zebra
+BuildRoot:	%{_tmppath}/%{srcname}-%{version}-root
+Obsoletes:	zebra
+Conflicts:	quagga frr
 
 %description
 The Mobile Routing variant of Quagga (http://www.quagga.net/) is a
@@ -169,7 +170,7 @@ The quagga-devel package contains the header and object files neccessary for
 developing OSPF-API and quagga applications.
 
 %prep
-%setup  -q
+%setup -q -n %{srcname}-%{version}
 
 %build
 
@@ -253,7 +254,7 @@ developing OSPF-API and quagga applications.
 make %{?_smp_mflags} MAKEINFO="makeinfo --no-split"
 
 pushd doc
-texi2html -number quagga.texi
+texi2html -number-sections quagga.texi
 make pdf || true
 popd
 
@@ -486,13 +487,13 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 %{_libdir}/*.a
 %{_libdir}/*.la
-%dir %attr(755,root,root) %{_includedir}/%{name}
-%{_includedir}/%name/*.h
-%dir %attr(755,root,root) %{_includedir}/%{name}/ospfd
-%{_includedir}/%name/ospfd/*.h
+%dir %attr(755,root,root) %{_includedir}/%{srcname}
+%{_includedir}/%{srcname}/*.h
+%dir %attr(755,root,root) %{_includedir}/%{srcname}/ospfd
+%{_includedir}/%{srcname}/ospfd/*.h
 %if %{with_ospfapi}
-%dir %attr(755,root,root) %{_includedir}/%{name}/ospfapi
-%{_includedir}/%name/ospfapi/*.h
+%dir %attr(755,root,root) %{_includedir}/%{srcname}/ospfapi
+%{_includedir}/%{srcname}/ospfapi/*.h
 %endif
 
 %changelog
