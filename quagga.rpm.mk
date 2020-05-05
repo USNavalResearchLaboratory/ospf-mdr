@@ -15,6 +15,7 @@ clean:
 build: quagga-$(VERSION).tar.gz redhat/quagga.spec
 	for d in SOURCES SPECS; do mkdir -p $(RPMBUILD)/$$d; done
 	cp -afv quagga-$(VERSION).tar.gz $(RPMBUILD)/SOURCES
+	cp -afv redhat/quagga-tmpfs.conf $(RPMBUILD)/SOURCES
 	cp -afv redhat/quagga.spec $(RPMBUILD)/SPECS
 	rpmbuild -bb --clean $(RPMBUILD)/SPECS/quagga.spec \
 	    --define '_topdir $(abspath $(RPMBUILD))'
