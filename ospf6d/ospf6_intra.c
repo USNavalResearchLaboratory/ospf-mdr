@@ -1701,15 +1701,30 @@ __ospf6_intra_process_route_table (struct ospf6_route_table *route_table)
 		      pass == numpass - 1)
 		    {
 		      char prefix[PREFIXSTRLEN];
-		      char nexthop[INET6_ADDRSTRLEN];
+		      char via[1024] = "";
+		      int offset = 0;
 
 		      ospf6_prefix2str (ospf6, &route->prefix,
 					prefix, sizeof(prefix));
-		      ospf6_addr2str (ospf6, &route->nexthop[0].address,
-				      nexthop, sizeof (nexthop));
+		      for (i = 0; i < OSPF6_MULTI_PATH_LIMIT &&
+			     ospf6_nexthop_is_set (&route->nexthop[i]); i++)
+			{
+			  char nexthop[INET6_ADDRSTRLEN];
+			  int r;
+
+			  ospf6_addr2str (ospf6, &route->nexthop[i].address,
+					  nexthop, sizeof (nexthop));
+			  r = snprintf (via + offset, sizeof (via) - offset,
+					"%s%s", i > 0 ? "," : "", nexthop);
+			  if (r >= sizeof (via) - offset)
+			    break;
+			  if (r > 0)
+			    offset += r;
+			}
+
 		      zlog_debug ("%s: pass %d skipping route to %s via %s "
 				  "because nexthop is not routable%s",
-				  __func__, pass, prefix, nexthop,
+				  __func__, pass, prefix, via,
 				  pass == numpass - 1 ?
 				  "; this shouldn't happen" : "");
 		    }
