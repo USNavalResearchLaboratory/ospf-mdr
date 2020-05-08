@@ -1857,6 +1857,103 @@ ospf6_intra_route_calculation_connected (struct ospf6_area *oa)
     }
 }
 
+/**
+ * Install IPv4 "link local address" routes for each neighbor
+ *
+ * @param oa The area to consider.
+ */
+static void
+ospf6_intra_route_calculation_link (struct ospf6_area *oa)
+{
+  struct listnode *n;
+  struct ospf6_interface *oi;
+
+  if (!ospf6_af_is_ipv4 (oa->ospf6))
+    return;
+
+  for (ALL_LIST_ELEMENTS_RO (oa->if_list, n, oi))
+    {
+      struct listnode *m;
+      struct ospf6_neighbor *on;
+
+      if (oi->type != OSPF6_IFTYPE_POINTOPOINT &&
+	  oi->type != OSPF6_IFTYPE_POINTOMULTIPOINT &&
+	  oi->type != OSPF6_IFTYPE_MDR)
+	continue;
+
+      if (IS_OSPF6_DEBUG_EXAMIN (LINK))
+	{
+	  zlog_debug ("Examining link-local routes for interface %s",
+		      oi->interface->name);
+	}
+
+      for (ALL_LIST_ELEMENTS_RO (oi->neighbor_list, m, on))
+	{
+	  struct ospf6_lsa *lsa;
+	  struct ospf6_link_lsa *link_lsa;
+	  struct ospf6_route *route;
+
+	  if (on->state < OSPF6_NEIGHBOR_TWOWAY)
+	    continue;
+
+	  lsa = ospf6_lsdb_lookup (htons (OSPF6_LSTYPE_LINK),
+				   htonl (on->ifindex), on->router_id,
+				   oi->lsdb);
+	  if (lsa == NULL || OSPF6_LSA_IS_MAXAGE (lsa))
+	    continue;
+
+	  if (IS_OSPF6_DEBUG_EXAMIN (LINK))
+	    zlog_debug ("%s found", lsa->name);
+
+	  link_lsa = (struct ospf6_link_lsa *)
+	    ((char *) lsa->header + sizeof (struct ospf6_lsa_header));
+
+	  if (ospf6_af_validate_ipv4_unicast (&link_lsa->linklocal_addr))
+	    {
+	      if (IS_OSPF6_DEBUG_EXAMIN (LINK))
+		{
+		  char buf[INET6_ADDRSTRLEN];
+		  ospf6_addr2str (oa->ospf6, &link_lsa->linklocal_addr,
+				  buf, sizeof (buf));
+		  zlog_debug ("Ignoring link-local address %s for "
+			      "neighbor %s", buf, on->name);
+		}
+	      continue;
+	    }
+
+	  route = ospf6_route_create ();
+	  route->type = OSPF6_DEST_TYPE_NETWORK;
+	  route->prefix = (struct prefix) {
+	    .family = AF_INET6,
+	    .prefixlen = oa->ospf6->af_interop ? 32 : 128,
+	    .u.prefix6 = link_lsa->linklocal_addr,
+	  };
+	  route->path.origin.type = lsa->header->type;
+	  route->path.origin.id = lsa->header->id;
+	  route->path.origin.adv_router = lsa->header->adv_router;
+	  route->path.area_id = oa->area_id;
+	  route->path.type = OSPF6_PATH_TYPE_INTRA;
+	  route->path.metric_type = 1;
+	  route->path.cost = on->cost;
+	  route->nexthop[0] = (struct ospf6_nexthop) {
+	    .ifindex = oi->interface->ifindex,
+	    .address = link_lsa->linklocal_addr,
+	  };
+
+	  if (IS_OSPF6_DEBUG_EXAMIN (LINK))
+	    {
+	      char buf[INET6_ADDRSTRLEN];
+	      ospf6_addr2str (oa->ospf6, &link_lsa->linklocal_addr,
+			      buf, sizeof (buf));
+	      zlog_debug ("Adding link-local route to %s/32 for neighbor %s",
+			  buf, on->name);
+	    }
+
+	  ospf6_route_add (route, oa->route_table);
+	}
+    }
+}
+
 void
 ospf6_intra_route_calculation (struct ospf6_area *oa)
 {
@@ -1884,6 +1981,10 @@ ospf6_intra_route_calculation (struct ospf6_area *oa)
 
   /* add routes for prefixes associated with all ospf interfaces */
   ospf6_intra_route_calculation_connected (oa);
+
+  /* add link local address routes */
+  if (ospf6_af_is_ipv4 (oa->ospf6))
+    ospf6_intra_route_calculation_link (oa);
 
   type = htons (OSPF6_LSTYPE_INTRA_PREFIX);
   for (lsa = ospf6_lsdb_type_head (type, oa->lsdb); lsa;
