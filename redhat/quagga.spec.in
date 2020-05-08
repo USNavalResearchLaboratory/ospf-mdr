@@ -117,6 +117,7 @@ Release:	%{?commit_date}%{?commit}
 License:	GPL
 Group: System Environment/Daemons
 Source0:	http://downloads.pf.itd.nrl.navy.mil/ospf-manet/%{srcname}-%{version}.tar.gz
+Source2:	quagga-tmpfs.conf
 URL:		http://www.nrl.navy.mil/itd/ncs/products/ospf-manet
 %if %{with_snmp}
 BuildRequires:	net-snmp-devel
@@ -286,6 +287,8 @@ install -m644 %{zeb_rh_src}/quagga.logrotate \
 install -m644 %{zeb_rh_src}/quagga.sysconfig \
 	$RPM_BUILD_ROOT/etc/sysconfig/quagga
 install -d -m750  $RPM_BUILD_ROOT/var/run/quagga
+install -d -m 755 %{buildroot}/%{_tmpfilesdir}
+install -p -m 644 %{SOURCE2} %{buildroot}/%{_tmpfilesdir}/quagga.conf
 
 %pre
 # add vty_group
@@ -471,6 +474,7 @@ rm -rf $RPM_BUILD_ROOT
 %config /etc/quagga/[!v]*
 %config /etc/rc.d/init.d/*
 %config(noreplace) /etc/sysconfig/quagga
+%{_tmpfilesdir}/quagga.conf
 %if %{with_pam}
 %config(noreplace) /etc/pam.d/quagga
 %endif
