@@ -439,7 +439,7 @@ if test "x${EXTRAVERSION}" != "x" ; then
 fi
 
 if test "x$with_pkg_git_version" = "xyes"; then
-	if test -d "${srcdir}/.git"; then
+	if test -d "${srcdir}/.git" -o -f "${srcdir}/lib/gitversion.h"; then
 		AC_DEFINE(GIT_VERSION, [1], [include git version info])
 	else	with_pkg_git_version="no"
 		AC_MSG_WARN([--with-pkg-git-version given, but this is not a git checkout])

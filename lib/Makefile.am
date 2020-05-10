@@ -51,10 +51,16 @@ if GIT_VERSION
 .PHONY: gitversion.h.tmp
 .SILENT: gitversion.h gitversion.h.tmp
 GITH=gitversion.h
-gitversion.h.tmp: $(srcdir)/../.git
-	@PERL@ $(srcdir)/gitversion.pl $(srcdir) > ${GITH}.tmp
+gitversion.h.tmp:
+	if [ -d "$(srcdir)/../.git" -o ! -f "$(srcdir)/gitversion.h" ]; then \
+	    @PERL@ $(srcdir)/gitversion.pl $(srcdir) > ${GITH}.tmp; \
+	else \
+	    cp ${GITH} ${GITH}.tmp; \
+	fi
 gitversion.h: gitversion.h.tmp
 	{ test -f ${GITH} && diff -s -q ${GITH}.tmp ${GITH}; } || cp -v ${GITH}.tmp ${GITH}
+
+EXTRA_DIST += gitversion.pl $(GITH)
 
 else
 .PHONY: gitversion.h
