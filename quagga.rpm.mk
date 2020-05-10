@@ -25,7 +25,7 @@ quagga-$(VERSION).tar.gz: Makefile
 	$(MAKE) dist
 
 Makefile redhat/quagga.spec: configure
-	./configure
+	./configure --with-pkg-git-version
 
 configure: bootstrap.sh
 	./bootstrap.sh

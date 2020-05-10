@@ -40,6 +40,7 @@
 %{!?with_babeld:	%define	with_babeld	1 }
 %{!?with_shared:	%define	with_shared	1 }
 %{!?with_multipath:	%define	with_multipath	64 }
+%{!?with_pkg_git_version: %define with_pkg_git_version 1 }
 %{!?quagga_user:	%define	quagga_user	quagga }
 %{!?vty_group:		%define	vty_group	quaggavty }
 
@@ -197,6 +198,9 @@ developing OSPF-API and quagga applications.
 %endif
 %if %{with_multipath}
 	--enable-multipath=%{with_multipath} \
+%endif
+%if %{with_pkg_git_version}
+	--with-pkg-git-version \
 %endif
 %if %{with_tcp_zebra}
 	--enable-tcp-zebra \
