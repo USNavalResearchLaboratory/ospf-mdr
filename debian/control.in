@@ -10,8 +10,8 @@ Package: quagga-mr
 Architecture: any
 Depends: ${shlibs:Depends}, logrotate (>= 3.2-11), iproute | iproute2, ${misc:Depends}
 Pre-Depends: adduser
-Conflicts: quagga, zebra, zebra-pj
-Replaces: quagga, zebra, zebra-pj
+Conflicts: quagga, frr, zebra, zebra-pj
+Replaces: quagga, frr, zebra, zebra-pj
 Suggests: snmpd
 Description: Mobile Routing variant of Quagga
  The Mobile Routing variant of Quagga (http://www.quagga.net/) is a
