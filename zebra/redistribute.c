@@ -337,6 +337,8 @@ zebra_interface_delete_update (struct interface *ifp)
   for (ALL_LIST_ELEMENTS (zebrad.client_list, node, nnode, client))
     if (client->ifinfo)
       zsend_interface_delete (client, ifp);
+
+  SET_FLAG (ifp->status, ZEBRA_INTERFACE_DELETED);
 }
 
 /* Interface address addition. */

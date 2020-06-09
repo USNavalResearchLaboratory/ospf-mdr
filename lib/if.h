@@ -96,6 +96,7 @@ struct interface
 #define ZEBRA_INTERFACE_LINKDETECTION (1 << 2)
 #define ZEBRA_INTERFACE_TRANSIENT  (1 << 3) /* interface configuration can be
                                                deleted when the interface is */
+#define ZEBRA_INTERFACE_DELETED    (1 << 4)
   
   /* Interface flags. */
   uint64_t flags;

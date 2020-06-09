@@ -97,11 +97,12 @@ if_zebra_new_hook (struct interface *ifp)
 static int
 if_zebra_delete_hook (struct interface *ifp)
 {
-  struct zebra_if *zebra_if;
-  
+  if (!CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_DELETED))
+    zebra_interface_delete_update (ifp);
+
   if (ifp->info)
     {
-      zebra_if = ifp->info;
+      struct zebra_if *zebra_if = ifp->info;
 
       /* Free installed address chains tree. */
       if (zebra_if->ipv4_subnets)
