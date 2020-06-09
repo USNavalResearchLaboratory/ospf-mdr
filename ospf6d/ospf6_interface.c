@@ -431,7 +431,8 @@ ospf6_interface_if_del (struct interface *ifp)
   if (oi->area)
     thread_execute (master, interface_down, oi, 0);
 
-  ospf6_interface_delete (oi);
+  if (if_is_transient (ifp))
+    ospf6_interface_delete (oi);
 }
 
 void

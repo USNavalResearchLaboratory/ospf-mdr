@@ -121,12 +121,13 @@ ospf6_zebra_if_del (int command, struct zclient *zclient, zebra_size_t length)
     zlog_debug ("Zebra Interface delete: %s index %d mtu %d",
 		ifp->name, ifp->ifindex, ifp->mtu6);
 
-#if 0
-  /* Why is this commented out? */
   ospf6_interface_if_del (ifp);
-#endif /*0*/
 
   ifp->ifindex = IFINDEX_INTERNAL;
+
+  if (if_is_transient (ifp))
+    if_delete (ifp);
+
   return 0;
 }
 
