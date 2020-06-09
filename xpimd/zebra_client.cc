@@ -78,6 +78,9 @@ zebra_if_del_cb(int command, struct zclient *zclient, zebra_size_t length)
 
     ifp->ifindex = IFINDEX_INTERNAL;
 
+    if (if_is_transient (ifp))
+        if_delete (ifp);
+
     return 0;
 }
 

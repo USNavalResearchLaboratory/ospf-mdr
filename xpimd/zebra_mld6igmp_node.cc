@@ -146,6 +146,10 @@ ZebraMld6igmpNode::delete_vif(const string& vif_name, string& error_msg)
 
     clear_config(vif_name);
 
+    const struct interface *ifp = if_lookup_by_name (vif_name.c_str());
+    if (ifp != NULL && if_is_transient(ifp))
+	del_if_config(ifp->name);
+
     return r;
 }
 

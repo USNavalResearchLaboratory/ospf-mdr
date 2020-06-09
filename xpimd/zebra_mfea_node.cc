@@ -289,6 +289,9 @@ ZebraMfeaNode::zebra_if_del(const struct interface *ifp)
 	XLOG_ERROR("set_config_all_vifs_done() failed: %s", error_msg.c_str());
 
     clear_config(ifp->name);
+
+    if (if_is_transient(ifp))
+	del_if_config(ifp->name);
 }
 
 void
