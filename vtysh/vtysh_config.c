@@ -346,6 +346,37 @@ vtysh_config_dump (FILE *fp)
             if (suppress_empty_config && list_isempty (config->line))
               continue;
 
+            /* don't save transient interface configuration to a
+               persistent config file */
+            if (i == INTERFACE_NODE)
+              {
+                int err;
+                struct stat stat;
+
+                err = fstat (fileno (fp), &stat);
+                if (!err && S_ISREG (stat.st_mode))
+                  {
+                    int suppress = 0;
+
+                    for (ALL_LIST_ELEMENTS_RO (config->line, mnode, line))
+                      {
+                        const char *s = line;
+
+                        while (isspace (*s))
+                          s++;
+
+                        if (strcmp (s, "transient") == 0)
+                          {
+                            suppress = 1;
+                            break;
+                          }
+                      }
+
+                    if (suppress)
+                      continue;
+                  }
+              }
+
 	    fprintf (fp, "%s\n", config->name);
 	    fflush (fp);
 

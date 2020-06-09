@@ -378,6 +378,12 @@ if_is_multicast (const struct interface *ifp)
   return ifp->flags & IFF_MULTICAST;
 }
 
+int
+if_is_transient (const struct interface *ifp)
+{
+  return CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_TRANSIENT);
+}
+
 /* Printout flag information into log */
 const char *
 if_flag_dump (unsigned long flag)

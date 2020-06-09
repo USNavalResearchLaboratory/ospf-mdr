@@ -491,6 +491,9 @@ if_delete_update (struct interface *ifp)
      for setting ifindex to IFINDEX_INTERNAL after processing the
      interface deletion message. */
   ifp->ifindex = IFINDEX_INTERNAL;
+
+  if (if_is_transient (ifp))
+    if_delete (ifp);
 }
 
 /* Interface is up. */
@@ -1063,6 +1066,43 @@ DEFUN (no_linkdetect,
   return CMD_SUCCESS;
 }
 
+DEFUN (transient_interface,
+       transient_interface_cmd,
+       "transient",
+       "Interface configuration is non-persistent\n")
+{
+  struct interface *ifp = vty->index;
+
+  if (!CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_TRANSIENT))
+    {
+      SET_FLAG (ifp->status, ZEBRA_INTERFACE_TRANSIENT);
+
+      /* notify clients */
+      zebra_interface_up_update (ifp);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_transient_interface,
+       no_transient_interface_cmd,
+       "no transient",
+       NO_STR
+       "Interface configuration is persistent\n")
+{
+  struct interface *ifp = vty->index;
+
+  if (CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_TRANSIENT))
+    {
+      UNSET_FLAG (ifp->status, ZEBRA_INTERFACE_TRANSIENT);
+
+      /* notify clients */
+      zebra_interface_up_update (ifp);
+    }
+
+  return CMD_SUCCESS;
+}
+
 DEFUN (shutdown_if,
        shutdown_if_cmd,
        "shutdown",
@@ -1550,6 +1590,9 @@ if_config_write (struct vty *vty)
 	vty_out (vty, " description %s%s", ifp->desc,
 		 VTY_NEWLINE);
 
+      if (if_is_transient (ifp))
+	vty_out (vty, " transient%s", VTY_NEWLINE);
+
       /* Assign bandwidth here to avoid unnecessary interface flap
 	 while processing config script */
       if (ifp->bandwidth != 0)
@@ -1639,4 +1682,6 @@ zebra_if_init (void)
   install_element (INTERFACE_NODE, &ip_address_label_cmd);
   install_element (INTERFACE_NODE, &no_ip_address_label_cmd);
 #endif /* HAVE_NETLINK */
+  install_element (INTERFACE_NODE, &transient_interface_cmd);
+  install_element (INTERFACE_NODE, &no_transient_interface_cmd);
 }

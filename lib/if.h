@@ -94,6 +94,8 @@ struct interface
 #define ZEBRA_INTERFACE_ACTIVE     (1 << 0)
 #define ZEBRA_INTERFACE_SUB        (1 << 1)
 #define ZEBRA_INTERFACE_LINKDETECTION (1 << 2)
+#define ZEBRA_INTERFACE_TRANSIENT  (1 << 3) /* interface configuration can be
+                                               deleted when the interface is */
   
   /* Interface flags. */
   uint64_t flags;
@@ -268,6 +270,7 @@ extern int if_is_loopback (const struct interface *);
 extern int if_is_broadcast (const struct interface *);
 extern int if_is_pointopoint (const struct interface *);
 extern int if_is_multicast (const struct interface *);
+extern int if_is_transient (const struct interface *);
 extern void if_add_hook (int, int (*)(struct interface *));
 extern void if_init (void);
 extern void if_terminate (void);

@@ -85,6 +85,13 @@ only Linux and Solaris, and only where network interface drivers support reporti
 link-state via the IFF_RUNNING flag.
 @end deffn
 
+@deffn {Interface Command} {transient} {}
+@deffnx {Interface Command} {no transient} {}
+Configure the transient setting of the interface.  Any configuration
+associated with transient network interfaces may be automatically
+deleted when the interface no longer exists.
+@end deffn
+
 @node Static Route Commands
 @section Static Route Commands
 
