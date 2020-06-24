@@ -117,6 +117,9 @@ void
 ZebraRouter::zebra_zclient_init(bool redist[ZEBRA_ROUTE_MAX],
 				bool default_information)
 {
+  if (_zebra_socket != NULL)
+    zclient_serv_path_set(_zebra_socket);
+
     _zclient = zclient_new();
     zclient_init(_zclient, ZEBRA_ROUTE_MAX);
 

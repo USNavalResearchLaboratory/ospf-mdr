@@ -29,13 +29,14 @@ public:
 
     ZebraRouterNode(EventLoop &eventloop, bool daemonize,
 		    const char *config_file, const char *default_config_file,
-		    const char *pid_file, const char *vty_addr,
-		    uint16_t vty_port, const char *vtysh_path, bool dryrun,
+		    const char *pid_file, const char *zebra_socket,
+		    const char *vty_addr, uint16_t vty_port,
+		    const char *vtysh_path, bool dryrun,
 		    zebra_privs_t &privs, quagga_signal_t *signals,
 		    unsigned int signal_count) :
 	ZebraRouter(eventloop, daemonize, config_file, default_config_file,
-		    pid_file, vty_addr, vty_port, vtysh_path, dryrun,
-		    privs, signals, signal_count)
+		    pid_file, zebra_socket, vty_addr, vty_port,
+		    vtysh_path, dryrun, privs, signals, signal_count)
     {}
 
     void init()

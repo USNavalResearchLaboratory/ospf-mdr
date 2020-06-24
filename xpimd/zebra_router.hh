@@ -49,12 +49,14 @@ public:
 
     ZebraRouter(EventLoop &eventloop, bool daemonize,
 		const char *config_file, const char *default_config_file,
-		const char *pid_file, const char *vty_addr, uint16_t vty_port,
+		const char *pid_file, const char *zebra_socket,
+		const char *vty_addr, uint16_t vty_port,
 		const char *vtysh_path, bool dryrun, zebra_privs_t &privs,
 		quagga_signal_t *signals, unsigned int signal_count) :
 	_eventloop(eventloop), _zclient(NULL), _daemonize(daemonize),
 	_config_file(config_file), _default_config_file(default_config_file),
-	_pid_file(pid_file), _vty_addr(vty_addr), _vty_port(vty_port),
+	_pid_file(pid_file), _zebra_socket(zebra_socket),
+	_vty_addr(vty_addr), _vty_port(vty_port),
 	_vtysh_path(vtysh_path), _dryrun(dryrun), _privs(privs),
 	_signals(signals), _signal_count(signal_count)
     {}
@@ -138,6 +140,7 @@ private:
     const char *_config_file;
     const char *_default_config_file;
     const char *_pid_file;
+    const char *_zebra_socket;
     const char *_vty_addr;
     uint16_t _vty_port;
     const char *_vtysh_path;

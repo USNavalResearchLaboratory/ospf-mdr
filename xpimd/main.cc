@@ -115,6 +115,7 @@ sigusr1(void)
 
 static void
 multicast_main(bool daemonize, const char *config_file, const char *pid_file,
+	       const char *zebra_socket,
 	       const char *vty_addr, uint16_t vty_port,
 	       const char *user, const char *group, const char *vtysh_path,
 	       bool dryrun, int family)
@@ -158,7 +159,8 @@ multicast_main(bool daemonize, const char *config_file, const char *pid_file,
     //
     ZebraRouterNode zebra_router_node(eventloop, daemonize, config_file,
 				      SYSCONFDIR XPIMD_DEFAULT_CONFIG,
-				      pid_file, vty_addr, vty_port,
+				      pid_file, zebra_socket,
+				      vty_addr, vty_port,
 				      vtysh_path, dryrun, privs, sigs,
 				      sizeof(sigs) / sizeof(sigs[0]));
     zebra_router_node.init();
@@ -277,6 +279,7 @@ main(int argc, char *argv[])
     bool daemonize = false;
     const char *config_file = NULL;
     const char *pid_file = PATH_XPIMD_PID;
+    const char *zebra_socket = NULL;
     const char *vty_addr = NULL;
     uint16_t vty_port = XPIMD_VTY_PORT;
 #ifdef QUAGGA_USER
@@ -314,6 +317,7 @@ main(int argc, char *argv[])
 	{"daemon",      no_argument,       NULL, 'd'},
 	{"config_file", required_argument, NULL, 'f'},
 	{"pid_file",    required_argument, NULL, 'i'},
+	{"socket",      required_argument, NULL, 'z'},
 	{"vty_addr",    required_argument, NULL, 'A'},
 	{"vty_port",    required_argument, NULL, 'P'},
 	{"user",        required_argument, NULL, 'u'},
@@ -327,7 +331,7 @@ main(int argc, char *argv[])
     };
 
     for (;;) {
-	int ch = getopt_long(argc, argv, "df:i:A:P:u:g:vCh4"
+	int ch = getopt_long(argc, argv, "df:i:z:A:P:u:g:vCh4"
 #ifdef HAVE_IPV6_MULTICAST
 			     "6"
 #endif	// HAVE_IPV6_MULTICAST
@@ -345,6 +349,10 @@ main(int argc, char *argv[])
 
 	case 'i':
 	    pid_file = optarg;
+	    break;
+
+	case 'z':
+	    zebra_socket = optarg;
 	    break;
 
 	case 'A':
@@ -413,8 +421,9 @@ main(int argc, char *argv[])
     // Run everything
     //
     try {
-	multicast_main(daemonize, config_file, pid_file, vty_addr, vty_port,
-		       user, group, vtysh_path, dryrun, family);
+	multicast_main(daemonize, config_file, pid_file, zebra_socket,
+		       vty_addr, vty_port, user, group,
+		       vtysh_path, dryrun, family);
     } catch(...) {
 	xorp_catch_standard_exceptions();
     }
