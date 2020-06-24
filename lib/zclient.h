@@ -141,7 +141,7 @@ extern void zclient_reset (struct zclient *);
 extern void zclient_free (struct zclient *);
 
 extern int  zclient_socket_connect (struct zclient *);
-extern void zclient_serv_path_set  (char *path);
+extern void zclient_serv_path_set  (const char *path);
 
 /* Send redistribute command to zebra daemon. Do not update zclient state. */
 extern int zebra_redistribute_send (int command, struct zclient *, int type);

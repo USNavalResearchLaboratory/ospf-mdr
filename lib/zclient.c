@@ -41,7 +41,7 @@ static void zclient_event (enum event, struct zclient *);
 
 extern struct thread_master *master;
 
-char *zclient_serv_path = NULL;
+const char *zclient_serv_path = NULL;
 
 /* This file local debug flag. */
 int zclient_debug = 0;
@@ -1113,7 +1113,7 @@ zclient_event (enum event event, struct zclient *zclient)
 }
 
 void
-zclient_serv_path_set (char *path)
+zclient_serv_path_set (const char *path)
 {
   struct stat sb;
 
