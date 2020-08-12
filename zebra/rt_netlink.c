@@ -1075,6 +1075,43 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
     return -1;
   name = (char *) RTA_DATA (tb[IFLA_IFNAME]);
 
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    {
+      int mtu;
+      int addr_len;
+      char buf[3 * INTERFACE_HWADDR_MAX];
+
+      mtu = tb[IFLA_MTU] ? *(int *) RTA_DATA (tb[IFLA_MTU]) : 0;
+      addr_len = tb[IFLA_ADDRESS] ? RTA_PAYLOAD (tb[IFLA_ADDRESS]) : 0;
+      if (addr_len > 0 && addr_len <= INTERFACE_HWADDR_MAX)
+        {
+          const unsigned char *p = RTA_DATA (tb[IFLA_ADDRESS]);
+          const unsigned char *end = p + addr_len;
+          unsigned int i = 0;
+
+          while (p < end)
+            {
+              unsigned char x;
+
+              x = (*p >> 4) & 0x0f;
+              buf[i++] = (x < 10) ? '0' + x : 'a' + x - 10;
+              x = *p & 0x0f;
+              buf[i++] = (x < 10) ? '0' + x : 'a' + x - 10;
+              buf[i++] = (p < end - 1) ? ':' : '\0';
+              p++;
+            }
+        }
+      else
+        {
+          buf[0] = '\0';
+        }
+
+      zlog_debug ("%s %s ifindex %u %s mtu %d%s%s",
+                  lookup (nlmsg_str, h->nlmsg_type), name, ifi->ifi_index,
+                  if_flag_dump (ifi->ifi_flags & 0x0000fffff),
+                  mtu, buf[0] != '\0' ? " hwaddr " : "", buf);
+    }
+
   /* Add interface. */
   if (h->nlmsg_type == RTM_NEWLINK)
     {
