@@ -648,17 +648,24 @@ nexthop_active_ipv4 (struct rib *rib, struct nexthop *nexthop, int set,
 	      
 	      return 1;
 	    }
-          else if (nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX)
+          else if (!CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
             {
               for (newhop = match->nexthop; newhop; newhop = newhop->next)
                 {
-                  if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB) &&
-                      nexthop->ifindex == newhop->ifindex)
-                    return 1;
+                  if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
+                      && ! CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_RECURSIVE)
+                      && (nexthop->type == NEXTHOP_TYPE_IPV4
+                          || nexthop->ifindex == newhop->ifindex))
+                    {
+                      if (nexthop->type == NEXTHOP_TYPE_IPV4)
+                        nexthop->ifindex = newhop->ifindex;
+
+                      return 1;
+                    }
                 }
               return 0;
             }
-	  else if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
+          else /* CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL) */
 	    {
 	      for (newhop = match->nexthop; newhop; newhop = newhop->next)
 		if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
@@ -678,10 +685,6 @@ nexthop_active_ipv4 (struct rib *rib, struct nexthop *nexthop, int set,
 		      }
 		    return 1;
 		  }
-	      return 0;
-	    }
-	  else
-	    {
 	      return 0;
 	    }
 	}
@@ -763,17 +766,24 @@ nexthop_active_ipv6 (struct rib *rib, struct nexthop *nexthop, int set,
 	      
 	      return 1;
 	    }
-          else if (nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX)
+          else if (!CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
             {
               for (newhop = match->nexthop; newhop; newhop = newhop->next)
                 {
-                  if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB) &&
-                      nexthop->ifindex == newhop->ifindex)
-                    return 1;
+                  if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
+                      && ! CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_RECURSIVE)
+                      && (nexthop->type == NEXTHOP_TYPE_IPV6
+                          || nexthop->ifindex == newhop->ifindex))
+                    {
+                      if (nexthop->type == NEXTHOP_TYPE_IPV6)
+                        nexthop->ifindex = newhop->ifindex;
+
+                      return 1;
+                    }
                 }
               return 0;
             }
-	  else if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
+          else /* CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL) */
 	    {
 	      for (newhop = match->nexthop; newhop; newhop = newhop->next)
 		if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
@@ -795,10 +805,6 @@ nexthop_active_ipv6 (struct rib *rib, struct nexthop *nexthop, int set,
 		      }
 		    return 1;
 		  }
-	      return 0;
-	    }
-	  else
-	    {
 	      return 0;
 	    }
 	}
