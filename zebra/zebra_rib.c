@@ -3024,6 +3024,7 @@ static_add_ipv6 (struct prefix *p, u_char type, struct in6_addr *gate,
   struct static_ipv6 *si;
   struct static_ipv6 *pp;
   struct static_ipv6 *cp;
+  struct static_ipv6 *update = NULL;
   struct route_table *stable;
 
   /* Lookup table.  */
@@ -3045,15 +3046,23 @@ static_add_ipv6 (struct prefix *p, u_char type, struct in6_addr *gate,
   /* Do nothing if there is a same static route.  */
   for (si = rn->info; si; si = si->next)
     {
-      if (distance == si->distance 
-	  && type == si->type
+      if (type == si->type
 	  && (! gate || IPV6_ADDR_SAME (gate, &si->ipv6))
 	  && (! ifname || strcmp (ifname, si->ifname) == 0))
 	{
-	  route_unlock_node (rn);
-	  return 0;
+          if (distance == si->distance)
+            {
+              route_unlock_node (rn);
+              return 0;
+            }
+          else
+            update = si;
 	}
     }
+
+  /* Distance changed.  */
+  if (update)
+    static_delete_ipv6 (p, type, gate, ifname, update->distance, vrf_id);
 
   /* Make new static route structure. */
   si = XCALLOC (MTYPE_STATIC_IPV6, sizeof (struct static_ipv6));
