@@ -18,7 +18,7 @@ AC_CANONICAL_BUILD()
 AC_CANONICAL_HOST()
 AC_CANONICAL_TARGET()
 
-AM_INIT_AUTOMAKE(1.6)
+AM_INIT_AUTOMAKE(m4_esyscmd([makeinfo --version > /dev/null 2>&1 || echo foreign no-installinfo]))
 AM_CONFIG_HEADER(config.h)
 
 AC_PATH_PROG(PERL, perl)
