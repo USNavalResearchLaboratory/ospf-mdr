@@ -40,17 +40,21 @@ PKGFILES	=					\
 	$(PKGNAME)-dbg_$(PKGVERSION)_$(PKGARCH).deb	\
 	$(PKGNAME)-doc_$(PKGVERSION)_all.deb
 
-.PHONY: build
-build: $(PKGFILES)
+.PHONY: all
+all: clean build
 
 .PHONY: clean
 clean:
-	fakeroot make -f debian/rules clean
+	test ! -e Makefile || make maintainer-clean
+	test ! -e debian/control || fakeroot make -f debian/rules clean
 	rm -f debian/changelog debian/control
 
 .PHONY: distclean
 distclean: clean
 	rm -rf $(PKGFILES)
+
+.PHONY: build
+build: $(PKGFILES)
 
 configure:
 	./bootstrap.sh
