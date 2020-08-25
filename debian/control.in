@@ -2,7 +2,8 @@ Source: quagga-mr
 Section: net
 Priority: optional
 Maintainer: @MAINTAINER@ <@MAINTAINER_EMAIL@>
-Build-Depends: debhelper (>= 5), autotools-dev, gawk, libreadline-dev, texinfo (>= 4.7), imagemagick, texlive-latex-base, texlive-generic-recommended, groff, pkg-config
+Build-Depends: debhelper (>= 5), autotools-dev, gawk, libreadline-dev, pkg-config
+Build-Depends-Indep: texinfo (>= 4.7), imagemagick, texlive-latex-base, texlive-generic-recommended, groff
 Standards-Version: 3.8.4
 Homepage: http://www.nrl.navy.mil/itd/ncs/products/ospf-manet
 
@@ -30,7 +31,7 @@ Description: Mobile Routing variant of Quagga
  field experiments.
 
 Package: quagga-mr-doc
-Section: net
+Section: doc
 Architecture: all
 Depends: ${misc:Depends}
 Suggests: quagga-mr

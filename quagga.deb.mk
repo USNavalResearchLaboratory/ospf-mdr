@@ -1,4 +1,9 @@
 # A Makefile for building debian package files.
+#
+# usage:
+#     make -f quagga.deb.mk
+# to exclude the doc package:
+#     DEB_BUILD_OPTIONS=nodoc make -f quagga.deb.mk
 
 MAINTAINER	= Tom Goff
 MAINTAINER_EMAIL= thomas.goff@ll.mit.edu
@@ -37,8 +42,14 @@ PKGARCH		= $(shell dpkg --print-architecture)
 PKGFILES	=					\
 	$(PKGNAME)_$(PKGVERSION)_$(PKGARCH).changes	\
 	$(PKGNAME)_$(PKGVERSION)_$(PKGARCH).deb		\
-	$(PKGNAME)-dbg_$(PKGVERSION)_$(PKGARCH).deb	\
-	$(PKGNAME)-doc_$(PKGVERSION)_all.deb
+	$(PKGNAME)-dbg_$(PKGVERSION)_$(PKGARCH).deb
+
+ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
+BUILD		= -b
+PKGFILES	+= $(PKGNAME)-doc_$(PKGVERSION)_all.deb
+else
+BUILD		= -B
+endif
 
 .PHONY: all
 all: clean build
@@ -68,5 +79,5 @@ configure:
 	    $< > $@
 
 $(PKGFILES): configure debian debian/changelog debian/control
-	dpkg-buildpackage -b -us -uc
+	dpkg-buildpackage $(BUILD) -us -uc
 	mv $(patsubst %, ../%, $(PKGFILES)) .

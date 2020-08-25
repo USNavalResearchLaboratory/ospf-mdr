@@ -69,12 +69,14 @@ build-stamp:
 
 	$(MAKE) 
 
+ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
 	# doc/ is a bit crazy
 	$(MAKE) -C doc quagga.pdf || true # pdfetex fails with exit code 1 but still produces a good looking .pdf
 	rm -vf doc/quagga.info
 	$(MAKE) -C doc quagga.info
 	rm -vf doc/quagga.info.html*
 	$(MAKE) -C doc draft-zebra-00.txt
+endif
 
 	touch build-stamp
 
