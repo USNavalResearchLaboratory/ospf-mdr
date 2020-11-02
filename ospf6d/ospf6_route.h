@@ -101,12 +101,13 @@ struct ospf6_path
 };
 
 #define OSPF6_PATH_TYPE_NONE         0
-#define OSPF6_PATH_TYPE_INTRA        1
-#define OSPF6_PATH_TYPE_INTER        2
-#define OSPF6_PATH_TYPE_EXTERNAL1    3
-#define OSPF6_PATH_TYPE_EXTERNAL2    4
-#define OSPF6_PATH_TYPE_REDISTRIBUTE 5
-#define OSPF6_PATH_TYPE_MAX          6
+#define OSPF6_PATH_TYPE_LINK         1
+#define OSPF6_PATH_TYPE_INTRA        2
+#define OSPF6_PATH_TYPE_INTER        3
+#define OSPF6_PATH_TYPE_EXTERNAL1    4
+#define OSPF6_PATH_TYPE_EXTERNAL2    5
+#define OSPF6_PATH_TYPE_REDISTRIBUTE 6
+#define OSPF6_PATH_TYPE_MAX          7
 
 #include "prefix.h"
 #include "table.h"

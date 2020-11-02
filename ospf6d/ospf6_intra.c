@@ -1932,7 +1932,7 @@ ospf6_intra_route_calculation_link (struct ospf6_area *oa)
 	  route->path.origin.id = lsa->header->id;
 	  route->path.origin.adv_router = lsa->header->adv_router;
 	  route->path.area_id = oa->area_id;
-	  route->path.type = OSPF6_PATH_TYPE_INTRA;
+	  route->path.type = OSPF6_PATH_TYPE_LINK;
 	  route->path.metric_type = 1;
 	  route->path.cost = on->cost;
 	  route->nexthop[0] = (struct ospf6_nexthop) {

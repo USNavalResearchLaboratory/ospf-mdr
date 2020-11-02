@@ -194,10 +194,10 @@ const char *ospf6_dest_type_substr[OSPF6_DEST_TYPE_MAX] =
 { "?", "R", "N", "D", "L", "A", };
 
 const char *ospf6_path_type_str[OSPF6_PATH_TYPE_MAX] =
-{ "Unknown", "Intra-Area", "Inter-Area", "External-1", "External-2", };
+{ "Unknown", "Link", "Intra-Area", "Inter-Area", "External-1", "External-2", };
 
 const char *ospf6_path_type_substr[OSPF6_PATH_TYPE_MAX] =
-{ "??", "IA", "IE", "E1", "E2", };
+{ "??", "L", "IA", "IE", "E1", "E2", };
 
 
 struct ospf6_route *
