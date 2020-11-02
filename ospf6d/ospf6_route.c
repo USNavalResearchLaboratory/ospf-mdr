@@ -649,15 +649,6 @@ ospf6_route_remove (struct ospf6_route *route,
 
   SET_FLAG (route->flag, OSPF6_ROUTE_WAS_REMOVED);
 
-  if (table->hook_remove)
-    (*table->hook_remove) (route);
-
-  /* adjust doubly linked list */
-  if (route->prev)
-    route->prev->next = route->next;
-  if (route->next)
-    route->next->prev = route->prev;
-
   if (node->info == route)
     {
       if (route->next && ospf6_route_is_same (route->next, route))
@@ -675,6 +666,15 @@ ospf6_route_remove (struct ospf6_route *route,
       else
         node->info = NULL; /* should unlock route_node here ? */
     }
+
+  if (table->hook_remove)
+    (*table->hook_remove) (route);
+
+  /* adjust doubly linked list */
+  if (route->prev)
+    route->prev->next = route->next;
+  if (route->next)
+    route->next->prev = route->prev;
 
   table->count--;
   ospf6_route_table_assert (table);
