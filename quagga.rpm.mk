@@ -29,3 +29,7 @@ Makefile redhat/quagga.spec: configure
 
 configure: bootstrap.sh
 	./bootstrap.sh
+
+Makefile: Makefile.am
+
+redhat/quagga.spec: redhat/quagga.spec.in

@@ -250,11 +250,11 @@ developing OSPF-API and quagga applications.
 %if %{with_pam}
 	--with-libpam \
 %endif
-%if %quagga_user
+%if 0%{?quagga_user:1}
 	--enable-user=%quagga_user \
 	--enable-group=%quagga_user \
 %endif
-%if %vty_group
+%if 0%{?vty_group:1}
 	--enable-vty-group=%vty_group \
 %endif
 --enable-netlink --enable-gcc-rdynamic
@@ -299,13 +299,13 @@ install -p -m 644 %{SOURCE2} %{buildroot}/%{_tmpfilesdir}/quagga.conf
 
 %pre
 # add vty_group
-%if %vty_group
+%if 0%{?vty_group:1}
 if getent group %vty_group > /dev/null ; then : ; else \
  /usr/sbin/groupadd -r %vty_group > /dev/null || : ; fi
 %endif
 
 # add quagga user and group
-%if %quagga_user
+%if 0%{?quagga_user:1}
 # Ensure that quagga_gid gets correctly allocated
 if getent group %quagga_user >/dev/null; then : ; else \
  /usr/sbin/groupadd -g %quagga_gid %quagga_user > /dev/null || : ; \
@@ -363,7 +363,7 @@ fi
 # Create dummy files if they don't exist so basic functions can be used.
 if [ ! -e %{_sysconfdir}/zebra.conf ]; then
 	echo "hostname `hostname`" > %{_sysconfdir}/zebra.conf
-%if %{quagga_user}
+%if 0%{?quagga_user:1}
 	chown %quagga_user:%quagga_user %{_sysconfdir}/zebra.conf
 %endif
 	chmod 640 %{_sysconfdir}/zebra.conf
@@ -374,7 +374,7 @@ if [ ! -e %{_sysconfdir}/vtysh.conf ]; then
 %if 0%{?quagga_user:1} && 0%{?vty_group:1}
 	chown %{quagga_user}:%{vty_group} %{_sysconfdir}/vtysh.conf
 %else
-%if %{quagga_user}
+%if 0%{?quagga_user:1}
 	chown %{quagga_user}:%{quagga_user} %{_sysconfdir}/vtysh.conf
 %endif
 %endif
@@ -447,7 +447,7 @@ rm -rf $RPM_BUILD_ROOT
 %doc doc/quagga.pdf
 %doc doc/mpls
 %doc ChangeLog INSTALL NEWS README REPORTING-BUGS SERVICES TODO RELEASE_NOTES.MobileRouting
-%if %{quagga_user}
+%if 0%{?quagga_user:1}
 %dir %attr(751,%quagga_user,%quagga_user) %{_sysconfdir}
 %dir %attr(750,%quagga_user,%quagga_user) /var/log/quagga 
 %dir %attr(751,%quagga_user,%quagga_user) /var/run/quagga
@@ -483,7 +483,7 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 %if %{with_vtysh}
 %{_bindir}/*
-%if %{vty_group}
+%if 0%{?vty_group:1}
 %attr(644,%quagga_user,%vty_group) %{_sysconfdir}/vtysh.conf.sample
 %endif
 %endif
