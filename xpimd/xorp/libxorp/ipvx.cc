@@ -57,8 +57,8 @@ IPvX::IPvX(int family, const uint8_t *from_uint8) throw (InvalidFamily)
 
 IPvX::IPvX(const IPv4& ipv4)
 {
-    static_assert(sizeof(_addr) >= sizeof(IPv4));
-    static_assert(sizeof(IPv4) == 4);
+    x_static_assert(sizeof(_addr) >= sizeof(IPv4));
+    x_static_assert(sizeof(IPv4) == 4);
 
     _af = AF_INET;
     memset(_addr, 0, sizeof(_addr));
@@ -67,8 +67,8 @@ IPvX::IPvX(const IPv4& ipv4)
 
 IPvX::IPvX(const IPv6& ipv6)
 {
-    static_assert(sizeof(_addr) >= sizeof(IPv6));
-    static_assert(sizeof(IPv6) == 16);
+    x_static_assert(sizeof(_addr) >= sizeof(IPv6));
+    x_static_assert(sizeof(IPv6) == 16);
 
     _af = AF_INET6;
     memcpy(_addr, &ipv6, 16);
@@ -181,7 +181,7 @@ IPvX::operator>>(uint32_t right_shift) const
 bool
 IPvX::operator<(const IPvX& other) const
 {
-    static_assert(sizeof(_addr) == 16);
+    x_static_assert(sizeof(_addr) == 16);
     unsigned int i;
 
     // Loop ends intentionally at the next-to-last word, not the last word.
