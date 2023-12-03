@@ -3,7 +3,7 @@ Section: net
 Priority: optional
 Maintainer: @MAINTAINER@ <@MAINTAINER_EMAIL@>
 Build-Depends: debhelper (>= 5), autotools-dev, gawk, libreadline-dev, pkg-config
-Build-Depends-Indep: texinfo (>= 4.7), imagemagick, texlive-latex-base, texlive-generic-recommended, groff
+Build-Depends-Indep: texinfo (>= 4.7), imagemagick, texlive-latex-base, texlive-latex-recommended, groff
 Standards-Version: 3.8.4
 Homepage: http://www.nrl.navy.mil/itd/ncs/products/ospf-manet
 
